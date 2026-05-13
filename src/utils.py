@@ -4,7 +4,7 @@ utils.py
 Rendering pipeline and I/O helpers for the GA image approximation.
 
 The central function is render(), which takes a list of Triangle objects
-and produces an H×W×3 numpy array representing the composed image. This
+and produces an HxWx3 numpy array representing the composed image. This
 array is what gets passed to FitnessFunction.evaluate().
 
 Rendering pipeline
@@ -93,7 +93,7 @@ def render(triangles: Sequence[Triangle]) -> np.ndarray:
     Returns
     -------
     np.ndarray
-        H×W×3 uint8 array (RGB, no alpha) representing the rendered image.
+        HxWx3 uint8 array (RGB, no alpha) representing the rendered image.
         Shape is (IMG_HEIGHT, IMG_WIDTH, 3).
 
     Notes
@@ -138,7 +138,7 @@ def load_target(path: str) -> np.ndarray:
     Load the target image from disk and return it as an RGB numpy array.
 
     Converts any input mode (RGBA, L, P, etc.) to RGB so the array
-    is always H×W×3 uint8, regardless of the source file format.
+    is always HxWx3 uint8, regardless of the source file format.
 
     Parameters
     ----------
@@ -148,7 +148,7 @@ def load_target(path: str) -> np.ndarray:
     Returns
     -------
     np.ndarray
-        H×W×3 uint8 RGB array.
+        HxWx3 uint8 RGB array.
 
     Raises
     ------
@@ -199,7 +199,7 @@ def save_render(array: np.ndarray, path: str) -> None:
     Parameters
     ----------
     array : np.ndarray
-        H×W×3 uint8 RGB array as returned by render().
+        HxWx3 uint8 RGB array as returned by render().
     path : str
         Destination file path. Extension determines format (.png recommended).
     """
@@ -275,9 +275,9 @@ def side_by_side(
     Parameters
     ----------
     target : np.ndarray
-        H×W×3 uint8 RGB array of the original painting.
+        HxWx3 uint8 RGB array of the original painting.
     candidate : np.ndarray
-        H×W×3 uint8 RGB array of the rendered candidate.
+        HxWx3 uint8 RGB array of the rendered candidate.
 
     Returns
     -------

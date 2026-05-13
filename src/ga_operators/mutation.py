@@ -190,10 +190,155 @@ class GaussianMutation(MutationOperator):
 
         return individual.copy_with(triangles)
 
+    def set_sigma(self, vertex_sigma: float, color_sigma: float) -> None:
+        """
+        Update the noise sigma values in place.
+
+        Called by SigmaDecayScheduler at the start of each generation to
+        implement adaptive mutation strength. Mutating sigma in place avoids
+        reconstructing the operator object every generation.
+
+        Parameters
+        ----------
+        vertex_sigma : float
+            New std-dev for vertex coordinate noise.
+        color_sigma : float
+            New std-dev for color channel noise.
+        """
+        self.vertex_sigma = vertex_sigma
+        self.color_sigma  = color_sigma
+
     def __repr__(self) -> str:
         return (
             f"GaussianMutation(rate={self.mutation_rate}, "
-            f"v_sigma={self.vertex_sigma}, c_sigma={self.color_sigma})"
+            f"v_sigma={self.vertex_sigma:.2f}, c_sigma={self.color_sigma:.2f})"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Sigma decay scheduler
+# ---------------------------------------------------------------------------
+
+class SigmaDecayScheduler:
+    """
+    Exponential decay schedule for GaussianMutation sigma parameters.
+
+    Motivation
+    ----------
+    A fixed sigma is a compromise: too large and late-generation refinement
+    is noisy; too small and early-generation exploration is insufficient.
+    Sigma decay resolves this by starting with large sigma (broad exploration)
+    and annealing it exponentially toward a small value (fine refinement) as
+    generations progress — analogous to simulated annealing's temperature schedule.
+
+    The decay formula is:
+
+        sigma(t) = sigma_max * (sigma_min / sigma_max) ** (t / T)
+
+    where t is the current generation and T is the total number of generations.
+    At t=0: sigma = sigma_max. At t=T: sigma = sigma_min.
+
+    Usage
+    -----
+    Pass the scheduler as the callback to GeneticAlgorithm.run():
+
+        scheduler = SigmaDecayScheduler(
+            mutation=gaussian_mut,
+            n_generations=500,
+            vertex_sigma_max=40.0,
+            vertex_sigma_min=2.0,
+            color_sigma_max=40.0,
+            color_sigma_min=2.0,
+        )
+        ga.run(target=target_array, init_strategy='image', callback=scheduler)
+
+    The scheduler logs sigma values alongside generation stats so you can
+    plot how sigma evolved over the run.
+
+    Parameters
+    ----------
+    mutation : GaussianMutation
+        The mutation operator whose sigma values are updated each generation.
+        Must be the same object passed to GeneticAlgorithm.
+    n_generations : int
+        Total number of generations (matches GAConfig.n_generations).
+    vertex_sigma_max : float
+        Starting sigma for vertex coordinates. Default 40.0.
+    vertex_sigma_min : float
+        Final sigma for vertex coordinates. Default 2.0.
+    color_sigma_max : float
+        Starting sigma for color channels. Default 40.0.
+    color_sigma_min : float
+        Final sigma for color channels. Default 2.0.
+    extra_callback : callable, optional
+        Additional callback to chain after sigma update, with the same
+        signature as the GA callback: (generation, best, stats).
+    """
+
+    def __init__(
+        self,
+        mutation: GaussianMutation,
+        n_generations: int,
+        vertex_sigma_max: float = 40.0,
+        vertex_sigma_min: float = 2.0,
+        color_sigma_max: float  = 40.0,
+        color_sigma_min: float  = 2.0,
+        extra_callback: Optional[callable] = None,
+    ) -> None:
+        self._mutation          = mutation
+        self._n_generations     = n_generations
+        self._v_max             = vertex_sigma_max
+        self._v_min             = vertex_sigma_min
+        self._c_max             = color_sigma_max
+        self._c_min             = color_sigma_min
+        self._extra_callback    = extra_callback
+        self.sigma_log: List[dict] = []
+
+    def __call__(
+        self,
+        generation: int,
+        best: "Individual",
+        stats: dict,
+    ) -> None:
+        """
+        Update sigma for the current generation and log the values.
+
+        Called automatically by the GA engine at the end of each generation.
+
+        Parameters
+        ----------
+        generation : int
+            Current generation index (0 = initial population).
+        best : Individual
+            Best individual in the current generation.
+        stats : dict
+            Generation statistics dict from the GA engine log.
+        """
+        T = max(self._n_generations, 1)
+        t = min(generation, T)
+
+        # Exponential decay: sigma(t) = max * (min/max)^(t/T)
+        decay = t / T
+        v_sigma = self._v_max * (self._v_min / self._v_max) ** decay
+        c_sigma = self._c_max * (self._c_min / self._c_max) ** decay
+
+        self._mutation.set_sigma(v_sigma, c_sigma)
+
+        self.sigma_log.append({
+            "generation":    generation,
+            "vertex_sigma":  round(v_sigma, 4),
+            "color_sigma":   round(c_sigma, 4),
+        })
+
+        if self._extra_callback is not None:
+            self._extra_callback(generation, best, stats)
+
+    def __repr__(self) -> str:
+        return (
+            f"SigmaDecayScheduler("
+            f"v_sigma={self._v_max}->{self._v_min}, "
+            f"c_sigma={self._c_max}->{self._c_min}, "
+            f"n_generations={self._n_generations})"
         )
 
 

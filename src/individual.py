@@ -208,9 +208,13 @@ class Individual:
         fitness_fn: FitnessFunction,
         rng: np.random.Generator,
         cache_render: bool = False,
-    ) -> Individual:
+    ) -> "Individual":
         """
         Create an Individual with NUM_TRIANGLES randomly initialised triangles.
+
+        All vertices and colors are drawn from uniform distributions with
+        no reference to the target image. Use from_image() for a smarter
+        initialisation that seeds colors from the target.
 
         Parameters
         ----------
@@ -230,6 +234,139 @@ class Individual:
             Triangle.random(IMG_WIDTH, IMG_HEIGHT, rng)
             for _ in range(NUM_TRIANGLES)
         ]
+        return cls(triangles, fitness_fn, cache_render=cache_render)
+
+    @classmethod
+    def from_image(
+        cls,
+        fitness_fn: FitnessFunction,
+        rng: np.random.Generator,
+        target: np.ndarray,
+        cache_render: bool = False,
+    ) -> "Individual":
+        """
+        Create an Individual with NUM_TRIANGLES image-seeded triangles.
+
+        Vertices are random but each triangle's color is sampled from the
+        target image at the triangle's centroid. This biases the initial
+        population toward the correct color palette from generation 0,
+        reducing the number of generations the GA needs to spend on basic
+        color discovery before it can start refining shapes.
+
+        Parameters
+        ----------
+        fitness_fn : FitnessFunction
+            Fitness function to attach to this individual.
+        rng : np.random.Generator
+            Caller-supplied random generator for reproducibility.
+        target : np.ndarray
+            H×W×3 uint8 RGB array of the target image. Passed through to
+            Triangle.from_image() for centroid color sampling.
+        cache_render : bool
+            Whether to cache the rendered array after evaluation.
+
+        Returns
+        -------
+        Individual
+            A new image-seeded Individual.
+        """
+        triangles = [
+            Triangle.from_image(IMG_WIDTH, IMG_HEIGHT, rng, target)
+            for _ in range(NUM_TRIANGLES)
+        ]
+        return cls(triangles, fitness_fn, cache_render=cache_render)
+
+    @classmethod
+    def from_grid(
+        cls,
+        fitness_fn: FitnessFunction,
+        rng: np.random.Generator,
+        target: np.ndarray,
+        n_cols: int = 10,
+        n_rows: int = 10,
+        vertex_noise_sigma: Optional[float] = None,
+        cache_render: bool = False,
+    ) -> "Individual":
+        """
+        Create an Individual with triangles anchored to a canvas grid.
+
+        The canvas is divided into n_cols x n_rows cells. Each cell is
+        split into two triangles (upper-left and lower-right), yielding
+        n_cols * n_rows * 2 triangles total. If this exceeds NUM_TRIANGLES,
+        triangles are sampled without replacement. If it falls short,
+        the remaining slots are filled with random triangles.
+
+        Triangle colors are sampled from the target image at each
+        triangle's centroid, combining spatial coverage with local color.
+
+        Vertex noise is applied per-individual to ensure population
+        diversity — without it, all individuals in the population would
+        start with identical chromosome structure.
+
+        Parameters
+        ----------
+        fitness_fn : FitnessFunction
+            Fitness function to attach to this individual.
+        rng : np.random.Generator
+            Caller-supplied random generator for reproducibility.
+        target : np.ndarray
+            H×W×3 uint8 RGB array of the target image.
+        n_cols : int
+            Number of grid columns. Default 10.
+        n_rows : int
+            Number of grid rows. Default 10 -> 10*10*2 = 200 candidate
+            triangles, from which NUM_TRIANGLES=100 are sampled.
+        vertex_noise_sigma : float or None
+            Std-dev of Gaussian noise applied to vertex coordinates.
+            If None, defaults to 0.3 * min(cell_width, cell_height),
+            which gives reasonable diversity while preserving locality.
+        cache_render : bool
+            Whether to cache the rendered array after evaluation.
+
+        Returns
+        -------
+        Individual
+            A new grid-anchored Individual.
+        """
+        cell_w = IMG_WIDTH  / n_cols
+        cell_h = IMG_HEIGHT / n_rows
+
+        if vertex_noise_sigma is None:
+            vertex_noise_sigma = 0.3 * min(cell_w, cell_h)
+
+        # Build all candidate triangles (2 per cell)
+        candidates: List[Triangle] = []
+        for row in range(n_rows):
+            for col in range(n_cols):
+                x0 = col * cell_w
+                y0 = row * cell_h
+                x1 = x0 + cell_w
+                y1 = y0 + cell_h
+
+                # Upper-left triangle: (x0,y0), (x1,y0), (x0,y1)
+                candidates.append(Triangle.from_grid(
+                    x0, y0, x1, y1, rng, target,
+                    vertex_noise_sigma=vertex_noise_sigma,
+                ))
+                # Lower-right triangle: (x1,y0), (x1,y1), (x0,y1)
+                candidates.append(Triangle.from_grid(
+                    x1, y0, x1, y1, rng, target,
+                    vertex_noise_sigma=vertex_noise_sigma,
+                ))
+
+        # Sample exactly NUM_TRIANGLES from the candidate pool
+        if len(candidates) >= NUM_TRIANGLES:
+            indices = rng.choice(len(candidates), size=NUM_TRIANGLES, replace=False)
+            triangles = [candidates[i] for i in indices]
+        else:
+            # Pad with random triangles if grid produces too few
+            triangles = candidates + [
+                Triangle.random(IMG_WIDTH, IMG_HEIGHT, rng)
+                for _ in range(NUM_TRIANGLES - len(candidates))
+            ]
+
+        # Shuffle draw order so no systematic bias in layering
+        rng.shuffle(triangles)
         return cls(triangles, fitness_fn, cache_render=cache_render)
 
     def copy_with(

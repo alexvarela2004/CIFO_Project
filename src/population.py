@@ -73,18 +73,20 @@ class Population:
         size: int,
         fitness_fn: FitnessFunction,
         rng: np.random.Generator,
-    ) -> Population:
+    ) -> "Population":
         """
         Create a Population of randomly initialised individuals.
+
+        All triangle vertices and colors are drawn from uniform distributions
+        with no reference to the target image. Use from_image() or mixed()
+        for smarter initialisation strategies.
 
         Parameters
         ----------
         size : int
-            Number of individuals. Typical range: 20-100. Larger
-            populations explore more broadly but cost more per generation.
+            Number of individuals. Typical range: 20-100.
         fitness_fn : FitnessFunction
-            Shared fitness function — the same object is referenced by all
-            individuals. No redundant copies of the target image are made.
+            Shared fitness function referenced by all individuals.
         rng : np.random.Generator
             Caller-supplied random generator for reproducibility.
 
@@ -95,9 +97,154 @@ class Population:
         """
         if size < 2:
             raise ValueError(f"Population size must be >= 2, got {size}.")
-
         individuals = [
             Individual.random(fitness_fn, rng)
+            for _ in range(size)
+        ]
+        return cls(individuals)
+
+    @classmethod
+    def from_image(
+        cls,
+        size: int,
+        fitness_fn: FitnessFunction,
+        rng: np.random.Generator,
+        target: np.ndarray,
+    ) -> "Population":
+        """
+        Create a Population where every individual is image-seeded.
+
+        Each individual's triangle colors are sampled from the target image
+        at each triangle's centroid. Vertices remain uniformly random.
+        This strategy converges faster in early generations because the GA
+        starts with a plausible color palette rather than random noise.
+
+        Parameters
+        ----------
+        size : int
+            Number of individuals.
+        fitness_fn : FitnessFunction
+            Shared fitness function referenced by all individuals.
+        rng : np.random.Generator
+            Caller-supplied random generator for reproducibility.
+        target : np.ndarray
+            H×W×3 uint8 RGB array of the target image.
+
+        Returns
+        -------
+        Population
+            Unevaluated population of `size` image-seeded individuals.
+        """
+        if size < 2:
+            raise ValueError(f"Population size must be >= 2, got {size}.")
+        individuals = [
+            Individual.from_image(fitness_fn, rng, target)
+            for _ in range(size)
+        ]
+        return cls(individuals)
+
+    @classmethod
+    def mixed(
+        cls,
+        size: int,
+        fitness_fn: FitnessFunction,
+        rng: np.random.Generator,
+        target: np.ndarray,
+        image_ratio: float = 0.5,
+    ) -> "Population":
+        """
+        Create a Population with a mix of random and image-seeded individuals.
+
+        Combines the diversity of random initialisation with the head-start
+        of image-seeded initialisation. The image_ratio controls the split.
+
+        Parameters
+        ----------
+        size : int
+            Total number of individuals.
+        fitness_fn : FitnessFunction
+            Shared fitness function referenced by all individuals.
+        rng : np.random.Generator
+            Caller-supplied random generator for reproducibility.
+        target : np.ndarray
+            H×W×3 uint8 RGB array of the target image.
+        image_ratio : float
+            Fraction of individuals to initialise from the image.
+            Default 0.5 — half image-seeded, half fully random.
+
+        Returns
+        -------
+        Population
+            Unevaluated mixed population of `size` individuals.
+        """
+        if size < 2:
+            raise ValueError(f"Population size must be >= 2, got {size}.")
+        if not (0.0 <= image_ratio <= 1.0):
+            raise ValueError(
+                f"image_ratio must be in [0.0, 1.0], got {image_ratio}."
+            )
+
+        n_image = int(round(size * image_ratio))
+        n_random = size - n_image
+
+        individuals = (
+            [Individual.from_image(fitness_fn, rng, target) for _ in range(n_image)]
+            + [Individual.random(fitness_fn, rng) for _ in range(n_random)]
+        )
+        # Shuffle so image-seeded and random individuals are interleaved
+        rng.shuffle(individuals)
+        return cls(individuals)
+
+    @classmethod
+    def from_grid(
+        cls,
+        size: int,
+        fitness_fn: FitnessFunction,
+        rng: np.random.Generator,
+        target: np.ndarray,
+        n_cols: int = 10,
+        n_rows: int = 10,
+        vertex_noise_sigma: Optional[float] = None,
+    ) -> "Population":
+        """
+        Create a Population where every individual is grid-initialised.
+
+        Each individual's triangles are anchored to a canvas grid, with
+        colors sampled from the target image and vertex noise applied per
+        individual to maintain population diversity.
+
+        Parameters
+        ----------
+        size : int
+            Number of individuals.
+        fitness_fn : FitnessFunction
+            Shared fitness function.
+        rng : np.random.Generator
+            Caller-supplied random generator.
+        target : np.ndarray
+            H×W×3 uint8 RGB array of the target image.
+        n_cols : int
+            Number of grid columns. Default 10.
+        n_rows : int
+            Number of grid rows. Default 10.
+        vertex_noise_sigma : float or None
+            Gaussian noise std-dev for vertex perturbation per individual.
+            If None, defaults to 0.3 * min(cell_width, cell_height).
+
+        Returns
+        -------
+        Population
+            Unevaluated grid-initialised population.
+        """
+        if size < 2:
+            raise ValueError(f"Population size must be >= 2, got {size}.")
+
+        individuals = [
+            Individual.from_grid(
+                fitness_fn, rng, target,
+                n_cols=n_cols, n_rows=n_rows,
+                vertex_noise_sigma=vertex_noise_sigma,
+            )
             for _ in range(size)
         ]
         return cls(individuals)

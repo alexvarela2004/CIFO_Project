@@ -8,7 +8,7 @@ Each Triangle encodes:
     - An RGBA color (R, G, B, A) where alpha controls transparency/blending.
 
 Design notes:
-    - Immutability is enforced via frozen and properties: once created,
+    - Immutability is enforced via __slots__ and properties: once created,
       a Triangle's state cannot be mutated. Genetic operators always produce
       new Triangle instances, which makes reasoning about state straightforward
       and avoids accidental side effects.
@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from typing import Tuple
 
 # ---------------------------------------------------------------------------
-# Type aliases
+# Type aliases — kept local to this module for clarity
 # ---------------------------------------------------------------------------
 Vertex = Tuple[float, float]   # (x, y) in canvas pixel coordinates
 RGBAColor = Tuple[int, int, int, int]  # (R, G, B, A) each in [0, 255]
@@ -39,8 +39,8 @@ class Triangle:
     ----------
     vertices : tuple of three (x, y) pairs
         Pixel coordinates of the three corners. Values are floats so that
-        genetic operators can work in continuous space; 
-        they are rounded only at render time.
+        genetic operators (e.g. Gaussian mutation) can work in continuous
+        space; they are rounded only at render time.
     color : tuple (R, G, B, A)
         Fill color with alpha channel. Alpha controls how this triangle
         blends with the layers beneath it, which is key for approximating
@@ -64,7 +64,7 @@ class Triangle:
         """Validate vertex and color ranges at construction time."""
         if len(self.vertices) != 3:
             raise ValueError(
-                f"A triangle must have exactly 3 vertices, got {len(self.vertices)} instead."
+                f"A triangle must have exactly 3 vertices, got {len(self.vertices)}."
             )
         for i, (x, y) in enumerate(self.vertices):
             if not (isinstance(x, (int, float)) and isinstance(y, (int, float))):
@@ -114,7 +114,7 @@ class Triangle:
 
     def area(self) -> float:
         """
-        Compute the absolute area of the triangle using the shoelace formula.
+        Compute the signed area of the triangle using the shoelace formula.
 
         Returns
         -------
@@ -193,13 +193,179 @@ class Triangle:
 
         return cls(vertices=vertices, color=rgba)
 
+    @classmethod
+    def from_image(
+        cls,
+        img_width: int,
+        img_height: int,
+        rng: np.random.Generator,
+        target: np.ndarray,
+        alpha_range: Tuple[int, int] = (30, 180),
+    ) -> "Triangle":
+        """
+        Create a Triangle with random vertices and a color sampled from
+        the target image.
+
+        Motivation
+        ----------
+        Pure random initialisation assigns arbitrary colors to triangles,
+        meaning the GA must spend many generations simply discovering the
+        right color palette before it can start refining shapes. Sampling
+        colors directly from the target image short-circuits this: every
+        triangle starts with a plausible color for its region, biasing the
+        initial population toward lower fitness from generation 0.
+
+        Color sampling strategy
+        -----------------------
+        Vertices are drawn uniformly at random (same as Triangle.random()).
+        The RGB color is then set to the pixel value at the centroid of
+        those vertices, clamped to the canvas boundaries. This means the
+        color is representative of the actual image region the triangle
+        covers, not a random point that may not overlap the triangle at all.
+
+        Alpha is sampled uniformly from alpha_range rather than [0, 255]
+        to avoid fully opaque triangles dominating early generations, which
+        would make it harder for lower layers to contribute.
+
+        Parameters
+        ----------
+        img_width : int
+            Canvas width in pixels.
+        img_height : int
+            Canvas height in pixels.
+        rng : np.random.Generator
+            Caller-supplied random generator for reproducibility.
+        target : np.ndarray
+            H×W×3 uint8 RGB array of the target image. Used only to
+            sample the centroid pixel color — not stored on the Triangle.
+        alpha_range : tuple of (int, int)
+            (min_alpha, max_alpha) for the sampled alpha channel.
+            Default (30, 180) keeps triangles semi-transparent, which
+            encourages layering and blending effects.
+
+        Returns
+        -------
+        Triangle
+            A new Triangle with random geometry and image-sampled color.
+        """
+        xs = rng.uniform(0, img_width, size=3)
+        ys = rng.uniform(0, img_height, size=3)
+        vertices = tuple(zip(xs.tolist(), ys.tolist()))
+
+        # Centroid of the three vertices
+        cx = int(np.clip(np.mean(xs), 0, img_width - 1))
+        cy = int(np.clip(np.mean(ys), 0, img_height - 1))
+
+        # Sample RGB from the target at the centroid pixel.
+        # target shape is (H, W, 3) so index as [row, col] = [y, x]
+        r, g, b = target[cy, cx].tolist()
+
+        alpha = int(rng.integers(alpha_range[0], alpha_range[1] + 1))
+        rgba = (r, g, b, alpha)
+
+        return cls(vertices=vertices, color=rgba)
+
+    @classmethod
+    def from_grid(
+        cls,
+        cell_x0: float,
+        cell_y0: float,
+        cell_x1: float,
+        cell_y1: float,
+        rng: np.random.Generator,
+        target: np.ndarray,
+        vertex_noise_sigma: float = 0.0,
+        alpha_range: Tuple[int, int] = (30, 180),
+    ) -> "Triangle":
+        """
+        Create a Triangle anchored to a specific grid cell of the canvas.
+
+        Motivation
+        ----------
+        Random and image-seeded initialisations place triangles at
+        uniformly random positions, which can leave regions of the canvas
+        uncovered in the initial population. Grid-based initialisation
+        partitions the canvas into cells and places exactly one triangle
+        per cell, guaranteeing full coverage from generation 0.
+
+        Each cell is split into a triangle by sampling three vertices from
+        the cell's four corners with optional Gaussian noise. The color is
+        sampled from the target image at the triangle's centroid, combining
+        spatial coverage with correct local color.
+
+        Vertex noise
+        ------------
+        Without noise, every individual in the population would start with
+        identical triangle positions (same grid), destroying diversity and
+        causing immediate premature convergence. vertex_noise_sigma
+        perturbs the vertices with Gaussian noise so each individual gets
+        a unique variant of the same underlying grid structure.
+
+        A good rule of thumb: sigma ~ 0.3 * cell_size gives enough
+        diversity while keeping triangles roughly in their intended region.
+
+        Parameters
+        ----------
+        cell_x0, cell_y0 : float
+            Top-left corner of the grid cell (pixel coordinates).
+        cell_x1, cell_y1 : float
+            Bottom-right corner of the grid cell (pixel coordinates).
+        rng : np.random.Generator
+            Caller-supplied random generator for reproducibility.
+        target : np.ndarray
+            H×W×3 uint8 RGB array of the target image. Used to sample
+            the centroid color.
+        vertex_noise_sigma : float
+            Std-dev of Gaussian noise applied to each vertex coordinate
+            after grid placement. 0.0 means exact grid corners (not
+            recommended for population diversity). Default 0.0 — callers
+            should pass a meaningful value (e.g. cell_width * 0.3).
+        alpha_range : tuple of (int, int)
+            (min_alpha, max_alpha) for the sampled alpha channel.
+            Default (30, 180).
+
+        Returns
+        -------
+        Triangle
+            A new grid-anchored Triangle with image-sampled color.
+        """
+        img_height, img_width = target.shape[:2]
+
+        # Base vertices: three of the four cell corners.
+        # We use (top-left, top-right, bottom-left) and
+        # (top-right, bottom-right, bottom-left) alternately to tile
+        # the cell cleanly. Here we always use the first decomposition;
+        # the caller (Individual.from_grid) alternates between the two.
+        base_xs = np.array([cell_x0, cell_x1, cell_x0], dtype=np.float32)
+        base_ys = np.array([cell_y0, cell_y0, cell_y1], dtype=np.float32)
+
+        # Apply Gaussian vertex noise for population diversity
+        if vertex_noise_sigma > 0.0:
+            base_xs += rng.normal(0, vertex_noise_sigma, size=3)
+            base_ys += rng.normal(0, vertex_noise_sigma, size=3)
+
+        # Clip to canvas boundaries
+        xs = np.clip(base_xs, 0, img_width - 1)
+        ys = np.clip(base_ys, 0, img_height - 1)
+
+        vertices = tuple(zip(xs.tolist(), ys.tolist()))
+
+        # Sample color from target at centroid
+        cx = int(np.clip(np.mean(xs), 0, img_width - 1))
+        cy = int(np.clip(np.mean(ys), 0, img_height - 1))
+        r, g, b = target[cy, cx].tolist()
+
+        alpha = int(rng.integers(alpha_range[0], alpha_range[1] + 1))
+
+        return cls(vertices=vertices, color=(r, g, b, alpha))
+
     def mutate_vertices(
         self,
         img_width: int,
         img_height: int,
         rng: np.random.Generator,
         sigma: float = 20.0,
-    ) -> Triangle:
+    ) -> "Triangle":
         """
         Return a new Triangle with Gaussian-perturbed vertices.
 

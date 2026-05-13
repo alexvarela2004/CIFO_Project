@@ -261,6 +261,9 @@ class GeneticAlgorithm:
 
     def run(
         self,
+        target: Optional[np.ndarray] = None,
+        init_strategy: str = "random",
+        image_ratio: float = 0.5,
         callback: Optional[Callable[[int, Individual, dict], None]] = None,
     ) -> Individual:
         """
@@ -268,11 +271,21 @@ class GeneticAlgorithm:
 
         Parameters
         ----------
+        target : np.ndarray, optional
+            H×W×3 uint8 RGB array of the target image. Required when
+            init_strategy is 'image' or 'mixed'. Ignored for 'random'.
+        init_strategy : str
+            Population initialisation strategy. One of:
+                'random' -- all triangles fully random (default).
+                'image'  -- triangle colors sampled from target image.
+                'mixed'  -- image_ratio fraction image-seeded, rest random.
+        image_ratio : float
+            Fraction of image-seeded individuals when init_strategy='mixed'.
+            Ignored for other strategies. Default 0.5.
         callback : callable, optional
             Called at the end of every generation with signature:
                 callback(generation: int, best: Individual, stats: dict)
-            Useful for live progress display in notebooks (e.g. updating
-            a matplotlib figure or printing a progress bar).
+            Useful for live progress display in notebooks.
 
         Returns
         -------
@@ -285,15 +298,36 @@ class GeneticAlgorithm:
         self.best_individual = None
         cfg.early_stopping.reset()
 
+        if init_strategy in ("image", "mixed", "grid") and target is None:
+            raise ValueError(
+                f"init_strategy='{init_strategy}' requires a target array. "
+                "Pass target=your_image_array to run()."
+            )
+
         start_time = time.time()
 
-        # -- Generation 0: initialise and evaluate
-        logger.info("Initialising population (size=%d).", cfg.population_size)
-        population = Population.random(
-            size=cfg.population_size,
-            fitness_fn=self._fitness_fn,
-            rng=self._rng,
+        logger.info(
+            "Initialising population (size=%d, strategy=%s).",
+            cfg.population_size, init_strategy,
         )
+
+        if init_strategy == "image":
+            population = Population.from_image(
+                cfg.population_size, self._fitness_fn, self._rng, target
+            )
+        elif init_strategy == "mixed":
+            population = Population.mixed(
+                cfg.population_size, self._fitness_fn, self._rng, target,
+                image_ratio=image_ratio,
+            )
+        elif init_strategy == "grid":
+            population = Population.from_grid(
+                cfg.population_size, self._fitness_fn, self._rng, target
+            )
+        else:
+            population = Population.random(
+                cfg.population_size, self._fitness_fn, self._rng
+            )
         population.evaluate(n_workers=cfg.n_workers)
 
         self.best_individual = population.best
