@@ -326,3 +326,196 @@ class KPointCrossover(CrossoverOperator):
 
     def __repr__(self) -> str:
         return f"KPointCrossover(k={self.k})"
+
+
+# ---------------------------------------------------------------------------
+# Concrete implementation 4: Segment shuffle crossover
+# ---------------------------------------------------------------------------
+
+class SegmentShuffleCrossover(CrossoverOperator):
+    """
+    Segment shuffle crossover.
+
+    Divides the chromosome into a random number of segments (between
+    k_min and k_max cuts) and for each segment independently decides
+    (with probability 0.5) whether it comes from parent_a or parent_b.
+
+    Differs from KPointCrossover in two ways:
+        1. The number of cuts varies randomly each call, rather than
+           being fixed — the operator explores different granularities
+           of recombination within a single run.
+        2. Segments are assigned independently rather than strictly
+           alternating. KPointCrossover always gives exactly half the
+           chromosome from each parent; here one parent may dominate
+           if the coin flips go that way, which is useful when one
+           parent is substantially fitter than the other.
+
+    Parameters
+    ----------
+    k_min : int
+        Minimum number of cut points. Must be >= 1. Default is 1.
+    k_max : int
+        Maximum number of cut points. Must be >= k_min. Default is 5.
+    """
+
+    def __init__(self, k_min: int = 1, k_max: int = 5) -> None:
+        if k_min < 1:
+            raise ValueError(f"k_min must be >= 1, got {k_min}.")
+        if k_max < k_min:
+            raise ValueError(f"k_max must be >= k_min, got {k_max}.")
+        self.k_min = k_min
+        self.k_max = k_max
+
+    def cross(
+        self,
+        parent_a: Individual,
+        parent_b: Individual,
+        rng: np.random.Generator,
+    ) -> Tuple[Individual, Individual]:
+        """
+        Apply segment shuffle crossover to produce two offspring.
+
+        Parameters
+        ----------
+        parent_a, parent_b : Individual
+            Parent individuals.
+        rng : np.random.Generator
+            Used to sample the number of cuts, cut positions, and
+            per-segment parent assignments.
+
+        Returns
+        -------
+        tuple of (Individual, Individual)
+            Two offspring. Segments not assigned to parent_a in child_1
+            are assigned to parent_b, and vice versa for child_2.
+        """
+        n = len(parent_a.triangles)
+
+        k = int(rng.integers(self.k_min, self.k_max + 1))
+        k = min(k, n - 1)  # guard against k >= n
+
+        cuts = sorted(
+            rng.choice(np.arange(1, n), size=k, replace=False).tolist()
+        )
+        boundaries = [0] + cuts + [n]
+
+        tris_a = list(parent_a.triangles)
+        tris_b = list(parent_b.triangles)
+        child_tris_1: List[Triangle] = []
+        child_tris_2: List[Triangle] = []
+
+        for i in range(len(boundaries) - 1):
+            s, e = boundaries[i], boundaries[i + 1]
+            # independent coin flip per segment — not forced alternation
+            if rng.random() < 0.5:
+                child_tris_1.extend(tris_a[s:e])
+                child_tris_2.extend(tris_b[s:e])
+            else:
+                child_tris_1.extend(tris_b[s:e])
+                child_tris_2.extend(tris_a[s:e])
+
+        child_1 = parent_a.copy_with(child_tris_1)
+        child_2 = parent_b.copy_with(child_tris_2)
+        return child_1, child_2
+
+    def __repr__(self) -> str:
+        return f"SegmentShuffleCrossover(k_min={self.k_min}, k_max={self.k_max})"
+
+
+# ---------------------------------------------------------------------------
+# Concrete implementation 5: Blend crossover
+# ---------------------------------------------------------------------------
+
+class BlendCrossover(CrossoverOperator):
+    """
+    Blend crossover BLX-alpha (Eshelman & Schaffer, 1993).
+
+    For each position i, creates a new triangle whose vertices and color
+    are sampled uniformly from the interval [min - alpha*I, max + alpha*I],
+    where min and max are the per-gene minima and maxima across the two
+    parents, and I = max - min is the distance between them.
+
+    alpha=0.0 : offspring always lies between the two parents (conservative).
+                Equivalent to convex interpolation.
+    alpha=0.5 : offspring may extend up to 50% beyond each parent (default
+                in the literature; balances exploitation and exploration).
+
+    Parameters
+    ----------
+    alpha : float
+        Extension factor for the sampling interval. Must be >= 0.0.
+        Default is 0.5 following Eshelman & Schaffer (1993).
+    """
+
+    def __init__(self, alpha: float = 0.5) -> None:
+        if alpha < 0.0:
+            raise ValueError(f"alpha must be >= 0.0, got {alpha}.")
+        self.alpha = alpha
+
+    def cross(
+        self,
+        parent_a: Individual,
+        parent_b: Individual,
+        rng: np.random.Generator,
+    ) -> Tuple[Individual, Individual]:
+        from utils import IMG_WIDTH, IMG_HEIGHT
+
+        tris_a = list(parent_a.triangles)
+        tris_b = list(parent_b.triangles)
+        n = len(tris_a)
+
+        child_tris_1: List[Triangle] = []
+        child_tris_2: List[Triangle] = []
+
+        for i in range(n):
+            t_a, t_b = tris_a[i], tris_b[i]
+
+            verts_a = np.array(t_a.vertices, dtype=np.float32)
+            verts_b = np.array(t_b.vertices, dtype=np.float32)
+
+            v_min = np.minimum(verts_a, verts_b)
+            v_max = np.maximum(verts_a, verts_b)
+            I_v   = v_max - v_min
+
+            low_v  = v_min - self.alpha * I_v
+            high_v = v_max + self.alpha * I_v
+
+            verts_1 = rng.uniform(low_v, high_v).astype(np.float32)
+            verts_2 = rng.uniform(low_v, high_v).astype(np.float32)
+
+            verts_1[:, 0] = np.clip(verts_1[:, 0], 0, IMG_WIDTH - 1)
+            verts_1[:, 1] = np.clip(verts_1[:, 1], 0, IMG_HEIGHT - 1)
+            verts_2[:, 0] = np.clip(verts_2[:, 0], 0, IMG_WIDTH - 1)
+            verts_2[:, 1] = np.clip(verts_2[:, 1], 0, IMG_HEIGHT - 1)
+
+            # --- color ---
+            color_a = np.array(t_a.color, dtype=np.float32)
+            color_b = np.array(t_b.color, dtype=np.float32)
+
+            c_min = np.minimum(color_a, color_b)
+            c_max = np.maximum(color_a, color_b)
+            I_c   = c_max - c_min
+
+            low_c  = c_min - self.alpha * I_c
+            high_c = c_max + self.alpha * I_c
+
+            color_1 = tuple(
+                int(c) for c in np.clip(rng.uniform(low_c, high_c), 0, 255)
+            )
+            color_2 = tuple(
+                int(c) for c in np.clip(rng.uniform(low_c, high_c), 0, 255)
+            )
+
+            child_tris_1.append(Triangle(
+                vertices=tuple(map(tuple, verts_1.tolist())),
+                color=color_1,
+            ))
+            child_tris_2.append(Triangle(
+                vertices=tuple(map(tuple, verts_2.tolist())),
+                color=color_2,
+            ))
+
+        return parent_a.copy_with(child_tris_1), parent_b.copy_with(child_tris_2)
+
+    def __repr__(self) -> str:
+        return f"BlendCrossover(alpha={self.alpha})"
