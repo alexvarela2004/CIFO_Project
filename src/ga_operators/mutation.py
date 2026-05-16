@@ -7,18 +7,23 @@ Mutation introduces random variation into offspring chromosomes. It is the
 primary source of genetic diversity beyond what crossover can recombine,
 and is essential for escaping local optima.
 
-Four concrete strategies are provided:
+Five concrete strategies are provided:
 
     1. GaussianMutation     — perturbs vertices and/or color of randomly
                               selected triangles with Gaussian noise.
                               Primary mutation operator; fine-grained local search.
-    2. ResetMutation        — replaces randomly selected triangles with
+    2. CreepMutation        — perturbs vertices and/or color with bounded uniform
+                              noise sampled from [-delta, +delta]. Unlike Gaussian,
+                              large outlier jumps are structurally impossible.
+                              Preferred over GaussianMutation in late generations
+                              when fine refinement is the goal.
+    3. ResetMutation        — replaces randomly selected triangles with
                               entirely new random ones. Coarse exploration;
                               useful for escaping local optima.
-    3. SwapMutation         — swaps the draw-order positions of two triangles.
+    4. SwapMutation         — swaps the draw-order positions of two triangles.
                               Explores the ordering space without changing
                               triangle geometry or color.
-    4. CompositeMutation    — applies multiple mutation operators in sequence
+    5. CompositeMutation    — applies multiple mutation operators in sequence
                               with configurable probabilities. Recommended for
                               the main GA run as it combines fine and coarse
                               search in a single operator.
@@ -212,6 +217,306 @@ class GaussianMutation(MutationOperator):
         return (
             f"GaussianMutation(rate={self.mutation_rate}, "
             f"v_sigma={self.vertex_sigma:.2f}, c_sigma={self.color_sigma:.2f})"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Concrete implementation 1b: Creep mutation
+# ---------------------------------------------------------------------------
+
+class CreepMutation(MutationOperator):
+    """
+    Bounded uniform (creep) perturbation of triangle vertices and/or color channels.
+
+    For each triangle in the chromosome, independently decides whether to
+    mutate it (Bernoulli trial with probability mutation_rate). Selected
+    triangles have their vertex coordinates and/or color channels perturbed
+    by a value drawn uniformly from [-delta, +delta].
+
+    Comparison with GaussianMutation
+    ---------------------------------
+    GaussianMutation samples noise from an unbounded normal distribution.
+    Even with a moderate sigma, occasional large outlier jumps occur (e.g.
+    a 50-pixel vertex displacement when sigma=15). CreepMutation hard-caps
+    every perturbation at delta pixels/units, making large destructive jumps
+    structurally impossible. This makes it preferable in late generations
+    when triangles are already well-placed and the goal is fine refinement
+    rather than broad exploration.
+
+    The two operators can be combined in CompositeMutation: Gaussian for
+    early exploration, creep for late-stage polish, or use DeltaDecayScheduler
+    to shrink delta over time analogously to SigmaDecayScheduler.
+
+    Parameters
+    ----------
+    mutation_rate : float
+        Per-triangle probability of applying mutation. In [0.0, 1.0].
+        Typical range: 0.01 - 0.10. Default is 0.05.
+    vertex_delta : float
+        Half-width of the uniform noise window for vertex coordinates (pixels).
+        Perturbation is drawn from U(-vertex_delta, +vertex_delta).
+        Default is 15.0.
+    color_delta : float
+        Half-width of the uniform noise window for color channels.
+        Perturbation is drawn from U(-color_delta, +color_delta).
+        Default is 15.0.
+    mutate_vertices : bool
+        If True, vertex coordinates are perturbed. Default is True.
+    mutate_color : bool
+        If True, color channels are perturbed. Default is True.
+    """
+
+    def __init__(
+        self,
+        mutation_rate: float = 0.05,
+        vertex_delta: float = 15.0,
+        color_delta: float = 15.0,
+        mutate_vertices: bool = True,
+        mutate_color: bool = True,
+    ) -> None:
+        if not (0.0 <= mutation_rate <= 1.0):
+            raise ValueError(
+                f"mutation_rate must be in [0.0, 1.0], got {mutation_rate}."
+            )
+        if vertex_delta <= 0.0:
+            raise ValueError(
+                f"vertex_delta must be > 0, got {vertex_delta}."
+            )
+        if color_delta <= 0.0:
+            raise ValueError(
+                f"color_delta must be > 0, got {color_delta}."
+            )
+        if not (mutate_vertices or mutate_color):
+            raise ValueError(
+                "At least one of mutate_vertices or mutate_color must be True."
+            )
+        self.mutation_rate = mutation_rate
+        self.vertex_delta = vertex_delta
+        self.color_delta = color_delta
+        self.mutate_vertices = mutate_vertices
+        self.mutate_color = mutate_color
+
+    def _perturb_vertices(
+        self,
+        tri: "Triangle",
+        rng: np.random.Generator,
+    ) -> "Triangle":
+        """
+        Return a new triangle with vertex coordinates perturbed by uniform noise.
+
+        Each of the 6 coordinate values (x1,y1,x2,y2,x3,y3) is independently
+        shifted by a value drawn from U(-vertex_delta, +vertex_delta), then
+        clamped to the image bounds.
+        """
+        noise = rng.uniform(-self.vertex_delta, self.vertex_delta, size=6)
+        # Build new vertex arrays from the existing triangle coords
+        pts = np.array([
+            tri.x1, tri.y1,
+            tri.x2, tri.y2,
+            tri.x3, tri.y3,
+        ], dtype=float) + noise
+
+        # Clamp x coords to [0, IMG_WIDTH] and y coords to [0, IMG_HEIGHT]
+        pts[0::2] = np.clip(pts[0::2], 0, IMG_WIDTH)
+        pts[1::2] = np.clip(pts[1::2], 0, IMG_HEIGHT)
+
+        return tri.replace_vertices(
+            int(pts[0]), int(pts[1]),
+            int(pts[2]), int(pts[3]),
+            int(pts[4]), int(pts[5]),
+        )
+
+    def _perturb_color(
+        self,
+        tri: "Triangle",
+        rng: np.random.Generator,
+    ) -> "Triangle":
+        """
+        Return a new triangle with color channels perturbed by uniform noise.
+
+        Each channel is independently shifted by U(-color_delta, +color_delta)
+        then clamped to [0, 255].
+        """
+        noise = rng.uniform(-self.color_delta, self.color_delta, size=4)
+        rgba = np.array(tri.color, dtype=float) + noise
+        rgba = np.clip(rgba, 0, 255).astype(int)
+        return tri.replace_color(tuple(rgba))
+
+    def mutate(
+        self,
+        individual: Individual,
+        rng: np.random.Generator,
+    ) -> Individual:
+        """
+        Apply per-gene creep mutation and return the mutated individual.
+
+        Parameters
+        ----------
+        individual : Individual
+            Source individual (not modified).
+        rng : np.random.Generator
+            Random generator for Bernoulli trials and uniform noise.
+
+        Returns
+        -------
+        Individual
+            New individual with selected genes perturbed by bounded uniform noise.
+        """
+        triangles = list(individual.triangles)
+        mutate_mask = rng.random(size=NUM_TRIANGLES) < self.mutation_rate
+
+        for i, do_mutate in enumerate(mutate_mask):
+            if not do_mutate:
+                continue
+
+            tri = triangles[i]
+
+            if self.mutate_vertices:
+                tri = self._perturb_vertices(tri, rng)
+            if self.mutate_color:
+                tri = self._perturb_color(tri, rng)
+
+            triangles[i] = tri
+
+        return individual.copy_with(triangles)
+
+    def set_delta(self, vertex_delta: float, color_delta: float) -> None:
+        """
+        Update the noise delta values in place.
+
+        Called by DeltaDecayScheduler each generation to implement adaptive
+        mutation strength. Mutating delta in place avoids reconstructing the
+        operator object every generation.
+
+        Parameters
+        ----------
+        vertex_delta : float
+            New half-width for vertex coordinate noise.
+        color_delta : float
+            New half-width for color channel noise.
+        """
+        self.vertex_delta = vertex_delta
+        self.color_delta = color_delta
+
+    def __repr__(self) -> str:
+        return (
+            f"CreepMutation(rate={self.mutation_rate}, "
+            f"v_delta={self.vertex_delta:.2f}, c_delta={self.color_delta:.2f})"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Delta decay scheduler (mirrors SigmaDecayScheduler for CreepMutation)
+# ---------------------------------------------------------------------------
+
+class DeltaDecayScheduler:
+    """
+    Exponential decay schedule for CreepMutation delta parameters.
+
+    Mirrors SigmaDecayScheduler exactly, but targets a CreepMutation instance
+    instead of GaussianMutation. Starts with a large delta (broad bounded
+    exploration) and anneals it toward a small value (fine refinement).
+
+    The decay formula is identical:
+
+        delta(t) = delta_max * (delta_min / delta_max) ** (t / T)
+
+    At t=0: delta = delta_max. At t=T: delta = delta_min.
+
+    Usage
+    -----
+        scheduler = DeltaDecayScheduler(
+            mutation=creep_mut,
+            n_generations=500,
+            vertex_delta_max=30.0,
+            vertex_delta_min=1.0,
+            color_delta_max=30.0,
+            color_delta_min=1.0,
+        )
+        ga.run(target=target_array, callback=scheduler)
+
+    Parameters
+    ----------
+    mutation : CreepMutation
+        The mutation operator whose delta values are updated each generation.
+    n_generations : int
+        Total number of generations (matches GAConfig.n_generations).
+    vertex_delta_max : float
+        Starting half-width for vertex coordinate noise. Default 30.0.
+    vertex_delta_min : float
+        Final half-width for vertex coordinate noise. Default 1.0.
+    color_delta_max : float
+        Starting half-width for color channel noise. Default 30.0.
+    color_delta_min : float
+        Final half-width for color channel noise. Default 1.0.
+    extra_callback : callable, optional
+        Additional callback chained after delta update, with signature
+        (generation, best, stats).
+    """
+
+    def __init__(
+        self,
+        mutation: CreepMutation,
+        n_generations: int,
+        vertex_delta_max: float = 30.0,
+        vertex_delta_min: float = 1.0,
+        color_delta_max: float  = 30.0,
+        color_delta_min: float  = 1.0,
+        extra_callback: Optional[callable] = None,
+    ) -> None:
+        self._mutation       = mutation
+        self._n_generations  = n_generations
+        self._v_max          = vertex_delta_max
+        self._v_min          = vertex_delta_min
+        self._c_max          = color_delta_max
+        self._c_min          = color_delta_min
+        self._extra_callback = extra_callback
+        self.delta_log: List[dict] = []
+
+    def __call__(
+        self,
+        generation: int,
+        best: "Individual",
+        stats: dict,
+    ) -> None:
+        """
+        Update delta for the current generation and log the values.
+
+        Called automatically by the GA engine at the end of each generation.
+
+        Parameters
+        ----------
+        generation : int
+            Current generation index (0 = initial population).
+        best : Individual
+            Best individual in the current generation.
+        stats : dict
+            Generation statistics dict from the GA engine log.
+        """
+        T = max(self._n_generations, 1)
+        t = min(generation, T)
+
+        decay   = t / T
+        v_delta = self._v_max * (self._v_min / self._v_max) ** decay
+        c_delta = self._c_max * (self._c_min / self._c_max) ** decay
+
+        self._mutation.set_delta(v_delta, c_delta)
+
+        self.delta_log.append({
+            "generation":   generation,
+            "vertex_delta": round(v_delta, 4),
+            "color_delta":  round(c_delta, 4),
+        })
+
+        if self._extra_callback is not None:
+            self._extra_callback(generation, best, stats)
+
+    def __repr__(self) -> str:
+        return (
+            f"DeltaDecayScheduler("
+            f"v_delta={self._v_max}->{self._v_min}, "
+            f"c_delta={self._c_max}->{self._c_min}, "
+            f"n_generations={self._n_generations})"
         )
 
 
@@ -511,10 +816,14 @@ class CompositeMutation(MutationOperator):
     Example
     -------
     >>> composite = CompositeMutation([
-    ...     GaussianMutation(mutation_rate=0.05, vertex_sigma=15.0),
+    ...     CreepMutation(mutation_rate=0.05, vertex_delta=15.0),
     ...     ResetMutation(mutation_rate=0.01),
     ...     SwapMutation(mutation_rate=0.2, n_swaps=1),
     ... ])
+
+    To benchmark Gaussian vs creep, swap CreepMutation for GaussianMutation
+    keeping all other parameters fixed — the only difference is the noise
+    distribution shape.
 
     Parameters
     ----------

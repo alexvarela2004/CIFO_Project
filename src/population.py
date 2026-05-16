@@ -441,34 +441,258 @@ class Population:
     # Diversity
     # ------------------------------------------------------------------
 
-    def diversity(self) -> float:
+    def _chromosome_matrix(self) -> np.ndarray:
         """
-        Compute a simple genotypic diversity metric.
+        Build an (m x 1000) float64 matrix where each row is the flattened
+        chromosome of one individual.
 
-        Diversity is defined as the mean pairwise standard deviation of
-        fitness values across the population, normalised to [0, 1] by
-        dividing by the fitness range. A value near 0 indicates the
-        population has converged (all individuals have similar fitness);
-        a value near 1 indicates high spread.
+        Each triangle contributes 10 values: 6 vertex coords (x1,y1,x2,y2,x3,y3)
+        and 4 color channels (R,G,B,A). With 100 triangles per individual the
+        chromosome is 1000-dimensional.
 
-        This is a fitness-space proxy for genotypic diversity — computing
-        true genotypic diversity (e.g. average Hamming distance between
-        chromosomes) would require comparing 100 triangles × 10 parameters
-        per individual pair, which is expensive and adds little insight
-        for the purposes of convergence monitoring.
+        Vertex coords are left in pixel space [0, IMG_WIDTH/HEIGHT]. Color
+        channels are in [0, 255]. Both axes are on different scales, which
+        matters for distance-based metrics (genotypic variance). Callers that
+        need scale-invariant distances should normalise before use — this method
+        returns raw values so the decision stays at the call site.
+
+        Returns
+        -------
+        np.ndarray
+            Shape (m, 1000), dtype float64.
+        """
+        rows = []
+        for ind in self._individuals:
+            gene = []
+            for tri in ind.triangles:
+                for x, y in tri.vertices:
+                    gene.append(float(x))
+                    gene.append(float(y))
+                gene.extend(float(c) for c in tri.color)
+            rows.append(gene)
+        return np.array(rows, dtype=np.float64)
+
+    def phenotypic_entropy(self) -> float:
+        """
+        Phenotypic entropy H(P) over the fitness distribution.
+
+        From the course slides (slide 9):
+
+            H(P) = sum_{j=1}^{N} F_j * log(F_j)
+
+        where N is the number of distinct fitness values in the population
+        and F_j is the fraction of individuals that share fitness value j.
+
+        Because fitness values are real-valued floats, exact duplicates are
+        rare. Each individual is therefore its own bucket in practice, giving
+        maximum entropy almost always. This metric is more meaningful for
+        discrete fitness landscapes; it is included here for completeness
+        and comparability with the course formulation.
 
         Returns
         -------
         float
-            Normalised diversity in [0, 1]. Returns 0.0 if all individuals
-            have identical fitness or population size is 1.
+            Entropy value (<= 0 by convention; closer to 0 means lower entropy
+            / more convergence). Returns 0.0 for a population of size 1.
         """
         self._require_evaluated()
         fitnesses = self.fitness_array()
-        fitness_range = fitnesses.max() - fitnesses.min()
-        if fitness_range < 1e-12:
+        m = len(fitnesses)
+        if m <= 1:
             return 0.0
-        return float(fitnesses.std() / fitness_range)
+
+        # Round to 6 decimal places so numerically near-identical fitnesses
+        # are treated as the same bucket — avoids spuriously high entropy from
+        # floating-point noise on what is effectively the same fitness value.
+        rounded = np.round(fitnesses, decimals=6)
+        unique, counts = np.unique(rounded, return_counts=True)
+        fractions = counts / m  # F_j for each unique value
+
+        # H = sum F_j * log(F_j); log of fractions in (0,1] is <= 0
+        h = float(np.sum(fractions * np.log(fractions)))
+        return h
+
+    def genotypic_entropy(self) -> float:
+        """
+        Genotypic entropy H(P) over the chromosome distribution.
+
+        Same formula as phenotypic_entropy() but N is the number of distinct
+        genotypes (chromosome strings) and F_j is the fraction of individuals
+        sharing a specific genotype.
+
+        For real-valued chromosomes (float vertex coords, int color channels),
+        exact genotype duplicates essentially never occur in a healthy
+        population. This metric is therefore almost always equal to
+        -log(1/m) = log(m) (maximum entropy, all individuals unique).
+
+        It becomes informative only when the population has severely
+        converged and multiple individuals are exact copies of each other
+        — a sign that mutation rate is too low or elitism too aggressive.
+
+        Returns
+        -------
+        float
+            Entropy value (<= 0). Returns 0.0 for a population of size 1.
+        """
+        self._require_evaluated()
+        m = len(self._individuals)
+        if m <= 1:
+            return 0.0
+
+        # Represent each chromosome as a rounded tuple for hashing.
+        # Vertex coords rounded to 2 decimal places; color channels are
+        # already integers so rounding has no effect.
+        def _key(ind) -> tuple:
+            key = []
+            for tri in ind.triangles:
+                for coord in tri.vertices:
+                    key.append(round(coord[0], 2))
+                    key.append(round(coord[1], 2))
+                key.extend(tri.color)
+            return tuple(key)
+
+        keys = [_key(ind) for ind in self._individuals]
+        from collections import Counter
+        counts = Counter(keys)
+        fractions = np.array(list(counts.values()), dtype=np.float64) / m
+
+        h = float(np.sum(fractions * np.log(fractions)))
+        return h
+
+    def phenotypic_variance(self) -> float:
+        """
+        Phenotypic variance V(P) of the fitness distribution.
+
+        From the course slides (slide 10):
+
+            V(P) = 1/(m-1) * sum_{i=1}^{m} (x_i - x_bar)^2
+
+        where m is the number of individuals, x_i is the fitness of
+        individual i and x_bar is the mean fitness of the population.
+
+        This is the standard unbiased sample variance of the fitness values.
+        A value near 0 indicates all individuals have similar fitness
+        (converged population). A large value indicates high spread.
+
+        Returns
+        -------
+        float
+            Sample variance of fitness values. Returns 0.0 for m <= 1.
+        """
+        self._require_evaluated()
+        fitnesses = self.fitness_array()
+        m = len(fitnesses)
+        if m <= 1:
+            return 0.0
+        # ddof=1 -> divides by (m-1) matching the course formula
+        return float(np.var(fitnesses, ddof=1))
+
+    def genotypic_variance(self) -> float:
+        """
+        Genotypic variance V(P) of the chromosome distribution.
+
+        From the course slides (slide 10):
+
+            V(P) = 1/(m-1) * sum_{i=1}^{m} (x_i - x_bar)^2
+
+        where x_i is the L2 distance from individual i's chromosome to
+        the best individual's chromosome, and x_bar is the mean of those
+        distances across the population.
+
+        The best individual is used as the origin (the slide notes that
+        any individual can serve as origin; the best is the most
+        informative choice because it measures how spread out the
+        population is around the current solution).
+
+        Chromosome vectors are normalised before computing distances so
+        that vertex coordinates (range ~[0, 400]) and color channels
+        (range [0, 255]) contribute on comparable scales:
+            - vertex coords divided by max(IMG_WIDTH, IMG_HEIGHT)
+            - color channels divided by 255
+
+        Returns
+        -------
+        float
+            Sample variance of distances to the best individual.
+            Returns 0.0 for m <= 1 or a population of identical individuals.
+        """
+        self._require_evaluated()
+        m = len(self._individuals)
+        if m <= 1:
+            return 0.0
+
+        from utils import IMG_WIDTH, IMG_HEIGHT
+        coord_scale = float(max(IMG_WIDTH, IMG_HEIGHT))  # normalise vertex coords
+        color_scale = 255.0                              # normalise color channels
+
+        # Build chromosome matrix: shape (m, 1000)
+        mat = self._chromosome_matrix()
+
+        # Build normalisation vector: first 6 values per triangle are coords,
+        # last 4 are color — repeat for all 100 triangles.
+        # Pattern per triangle: [x, y, x, y, x, y, R, G, B, A] -> 10 values
+        scales_per_tri = (
+            [coord_scale, coord_scale] * 3  # 6 vertex coords
+            + [color_scale] * 4             # 4 color channels
+        )
+        scale_vec = np.array(scales_per_tri * 100, dtype=np.float64)  # 1000-dim
+        mat_norm = mat / scale_vec
+
+        # Origin = best individual (index 0 after sort, population is kept sorted)
+        origin = mat_norm[0]  # best individual is always at index 0 after evaluate()
+
+        # L2 distance from each individual to the origin
+        diffs = mat_norm - origin                    # (m, 1000)
+        distances = np.sqrt((diffs ** 2).sum(axis=1))  # (m,)
+
+        # Sample variance of distances
+        if m <= 1:
+            return 0.0
+        return float(np.var(distances, ddof=1))
+
+    def diversity(self) -> float:
+        """
+        Composite diversity metric returned by the GA engine logger.
+
+        Returns phenotypic variance (sample variance of fitness values),
+        matching the course slide 10 formula for V(P) with phenotypic
+        interpretation. Logged every generation as the primary diversity
+        signal.
+
+        For full diversity analysis use the dedicated methods:
+            - phenotypic_entropy()
+            - genotypic_entropy()
+            - phenotypic_variance()
+            - genotypic_variance()
+
+        Returns
+        -------
+        float
+            Sample variance of fitness values across the population.
+        """
+        return self.phenotypic_variance()
+
+    def diversity_report(self) -> dict:
+        """
+        Compute all four diversity metrics and return them as a dict.
+
+        Intended for periodic logging (e.g. every 50 generations) rather
+        than every generation, since genotypic_variance() builds a full
+        chromosome matrix and is more expensive than the fitness-only metrics.
+
+        Returns
+        -------
+        dict
+            Keys: 'phenotypic_entropy', 'genotypic_entropy',
+                  'phenotypic_variance', 'genotypic_variance'.
+            All values are Python floats.
+        """
+        return {
+            "phenotypic_entropy":  self.phenotypic_entropy(),
+            "genotypic_entropy":   self.genotypic_entropy(),
+            "phenotypic_variance": self.phenotypic_variance(),
+            "genotypic_variance":  self.genotypic_variance(),
+        }
 
     # ------------------------------------------------------------------
     # Replacement
