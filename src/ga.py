@@ -134,6 +134,179 @@ class EarlyStopping:
 
 
 # ---------------------------------------------------------------------------
+# Diversity-aware early stopping
+# ---------------------------------------------------------------------------
+
+@dataclass
+class DiversityAwareEarlyStopping:
+    """
+    Early stopping that requires both fitness stagnation AND diversity collapse
+    before terminating the run.
+
+    Motivation
+    ----------
+    The plain EarlyStopping class stops as soon as best fitness stops improving
+    for `patience` generations, regardless of whether the population still has
+    genetic diversity. This can kill a run prematurely: the population may be
+    exploring diverse regions of the search space that have not yet produced
+    a better best individual.
+
+    This class adds a second condition: the run only stops when fitness has
+    stagnated AND at least one diversity metric has fallen below its threshold.
+    If fitness is stuck but the population is still diverse, the stagnation
+    counter is reset — the algorithm is given more time to exploit its
+    remaining diversity.
+
+    The two diversity metrics used are:
+        - phenotypic_variance : variance of fitness values across the population.
+          Drops toward 0 when all individuals converge to similar fitness.
+        - genotypic_variance  : variance of L2 distances from each individual's
+          chromosome to the best individual's chromosome. Drops toward 0 when
+          all chromosomes are genetically similar.
+
+    Either metric falling below its threshold is treated as a diversity collapse
+    signal. Requiring both to collapse simultaneously would be too conservative;
+    requiring either is the safer choice for early stopping.
+
+    Parameters
+    ----------
+    patience : int
+        Consecutive generations of fitness stagnation required before checking
+        diversity. Same semantics as EarlyStopping.patience. Default 50.
+    tolerance : float
+        Minimum absolute improvement in best fitness to count as progress.
+        Same semantics as EarlyStopping.tolerance. Default 1e-4.
+    phenotypic_variance_threshold : float
+        Phenotypic variance value below which the population is considered
+        phenotypically converged. Appropriate value depends on the fitness
+        scale (RMSE values typically in [20, 80]); default 0.01 means
+        fitness values are clustered within ~0.1 RMSE of each other.
+    genotypic_variance_threshold : float
+        Genotypic variance value below which the population is considered
+        genotypically converged. This is variance of normalised L2 distances
+        (chromosomes normalised to [0,1] per axis), so the scale is
+        independent of image resolution. Default 1e-4.
+    diversity_check_interval : int
+        How often (in generations) to recompute genotypic_variance, which
+        requires building the full chromosome matrix and is more expensive
+        than fitness-only metrics. Default 10 (check every 10 generations).
+        Set to 1 to check every generation (slower but more responsive).
+    """
+
+    patience: int = 50
+    tolerance: float = 1e-4
+    phenotypic_variance_threshold: float = 0.01
+    genotypic_variance_threshold: float = 1e-4
+    diversity_check_interval: int = 10
+
+    # internal state — not constructor params
+    _best_fitness: float = field(default=float("inf"), init=False, repr=False)
+    _stagnation_counter: int = field(default=0, init=False, repr=False)
+    _last_phenotypic_var: float = field(default=float("inf"), init=False, repr=False)
+    _last_genotypic_var: float = field(default=float("inf"), init=False, repr=False)
+
+    def update(
+        self,
+        generation: int,
+        current_best: float,
+        population: "Population",
+    ) -> bool:
+        """
+        Update state and decide whether to stop.
+
+        Parameters
+        ----------
+        generation : int
+            Current generation index. Used to gate the expensive genotypic
+            variance computation to every diversity_check_interval generations.
+        current_best : float
+            Best fitness in the current generation.
+        population : Population
+            The evaluated population. Used to compute diversity metrics when
+            the diversity check interval fires.
+
+        Returns
+        -------
+        bool
+            True if the run should stop, False otherwise.
+        """
+        if self.patience <= 0:
+            return False
+
+        # -- Fitness stagnation check (same logic as EarlyStopping)
+        improvement = self._best_fitness - current_best
+        if improvement > self.tolerance:
+            self._best_fitness = current_best
+            self._stagnation_counter = 0
+            return False  # fitness still improving - never stop regardless of diversity
+
+        self._stagnation_counter += 1
+
+        # not yet patient enough to consider stopping
+        if self._stagnation_counter < self.patience:
+            return False
+
+        # -- Fitness has stagnated for `patience` gens - now check diversity
+        # recompute on the check interval; reuse cached values otherwise
+        if generation % self.diversity_check_interval == 0:
+            self._last_phenotypic_var = population.phenotypic_variance()
+            self._last_genotypic_var  = population.genotypic_variance()
+
+            logger.debug(
+                "Diversity check at gen %d: pheno_var=%.6f, geno_var=%.6f",
+                generation,
+                self._last_phenotypic_var,
+                self._last_genotypic_var,
+            )
+
+        pheno_collapsed = self._last_phenotypic_var < self.phenotypic_variance_threshold
+        geno_collapsed  = self._last_genotypic_var  < self.genotypic_variance_threshold
+
+        if pheno_collapsed or geno_collapsed:
+            logger.info(
+                "DiversityAwareEarlyStopping triggered at gen %d: "
+                "stagnation=%d gens, pheno_var=%.6f (threshold=%.6f), "
+                "geno_var=%.6f (threshold=%.6f).",
+                generation,
+                self._stagnation_counter,
+                self._last_phenotypic_var,
+                self.phenotypic_variance_threshold,
+                self._last_genotypic_var,
+                self.genotypic_variance_threshold,
+            )
+            return True
+
+        # fitness stagnated but population still diverse - reset counter and
+        # give the algorithm more time to exploit remaining diversity
+        logger.debug(
+            "Fitness stagnated for %d gens but diversity is healthy "
+            "(pheno_var=%.6f, geno_var=%.6f) - resetting stagnation counter.",
+            self._stagnation_counter,
+            self._last_phenotypic_var,
+            self._last_genotypic_var,
+        )
+        self._stagnation_counter = 0
+        return False
+
+    def reset(self) -> None:
+        """Reset all internal state — call before re-running the GA."""
+        self._best_fitness = float("inf")
+        self._stagnation_counter = 0
+        self._last_phenotypic_var = float("inf")
+        self._last_genotypic_var = float("inf")
+
+    def __repr__(self) -> str:
+        return (
+            f"DiversityAwareEarlyStopping("
+            f"patience={self.patience}, "
+            f"tolerance={self.tolerance}, "
+            f"pheno_var_threshold={self.phenotypic_variance_threshold}, "
+            f"geno_var_threshold={self.genotypic_variance_threshold}, "
+            f"check_interval={self.diversity_check_interval})"
+        )
+
+
+# ---------------------------------------------------------------------------
 # GA configuration dataclass
 # ---------------------------------------------------------------------------
 
@@ -179,12 +352,14 @@ class GAConfig:
     n_elites: int = 1
     n_workers: int = 1
     early_stopping: EarlyStopping = field(default_factory=EarlyStopping)
+    diversity_early_stopping: Optional[DiversityAwareEarlyStopping] = field(default=None)
     checkpoint_interval: int = 50
     checkpoint_dir: str = "outputs/checkpoints"
     seed: Optional[int] = None
 
     def to_dict(self) -> dict:
         """Serialise config to a plain dict (for JSON logging)."""
+        des = self.diversity_early_stopping
         return {
             "population_size": self.population_size,
             "n_generations": self.n_generations,
@@ -193,6 +368,10 @@ class GAConfig:
             "n_workers": self.n_workers,
             "early_stopping_patience": self.early_stopping.patience,
             "early_stopping_tolerance": self.early_stopping.tolerance,
+            "diversity_early_stopping_enabled": des is not None,
+            "diversity_early_stopping_patience": des.patience if des else None,
+            "diversity_early_stopping_pheno_threshold": des.phenotypic_variance_threshold if des else None,
+            "diversity_early_stopping_geno_threshold": des.genotypic_variance_threshold if des else None,
             "checkpoint_interval": self.checkpoint_interval,
             "checkpoint_dir": self.checkpoint_dir,
             "seed": self.seed,
@@ -234,6 +413,11 @@ class GeneticAlgorithm:
     best_individual : Individual or None
         The best individual found across all generations. Updated every
         generation; available after run() completes.
+    current_population : Population or None
+        The most recently evaluated Population. Updated every generation
+        so callbacks can access full diversity metrics via
+        population.diversity_report() without the GA engine needing to
+        recompute them independently.
     """
 
     def __init__(
@@ -254,6 +438,7 @@ class GeneticAlgorithm:
         self._rng: np.random.Generator = np.random.default_rng(self._config.seed)
         self.generation_log: List[dict] = []
         self.best_individual: Optional[Individual] = None
+        self.current_population: Optional[Population] = None
 
     # ------------------------------------------------------------------
     # Public interface
@@ -297,6 +482,8 @@ class GeneticAlgorithm:
         self.generation_log = []
         self.best_individual = None
         cfg.early_stopping.reset()
+        if cfg.diversity_early_stopping is not None:
+            cfg.diversity_early_stopping.reset()
 
         if init_strategy in ("image", "mixed", "grid") and target is None:
             raise ValueError(
@@ -329,6 +516,7 @@ class GeneticAlgorithm:
                 cfg.population_size, self._fitness_fn, self._rng
             )
         population.evaluate(n_workers=cfg.n_workers)
+        self.current_population = population
 
         self.best_individual = population.best
         self._log_generation(0, population, time.time() - start_time)
@@ -341,6 +529,7 @@ class GeneticAlgorithm:
         for gen in range(1, cfg.n_generations + 1):
             population = self._step(population)
             population.evaluate(n_workers=cfg.n_workers)
+            self.current_population = population
 
             # Update global best across all generations
             if population.best < self.best_individual:
@@ -367,6 +556,13 @@ class GeneticAlgorithm:
             if cfg.early_stopping.update(stats["best"]):
                 logger.info("Run ended at generation %d by early stopping.", gen)
                 break
+
+            if cfg.diversity_early_stopping is not None:
+                if cfg.diversity_early_stopping.update(gen, stats["best"], population):
+                    logger.info(
+                        "Run ended at generation %d by diversity-aware early stopping.", gen
+                    )
+                    break
 
         logger.info(
             "Run complete. Best fitness: %.4f after %d generations.",
