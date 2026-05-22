@@ -308,23 +308,21 @@ class CreepMutation(MutationOperator):
         shifted by a value drawn from U(-vertex_delta, +vertex_delta), then
         clamped to the image bounds.
         """
-        noise = rng.uniform(-self.vertex_delta, self.vertex_delta, size=6)
-        # Build new vertex arrays from the existing triangle coords
-        pts = np.array([
-            tri.x1, tri.y1,
-            tri.x2, tri.y2,
-            tri.x3, tri.y3,
-        ], dtype=float) + noise
+        # Generate bounded uniform noise for x and y coordinates separately
+        noise_x = rng.uniform(-self.vertex_delta, self.vertex_delta, size=3)
+        noise_y = rng.uniform(-self.vertex_delta, self.vertex_delta, size=3)
 
-        # Clamp x coords to [0, IMG_WIDTH] and y coords to [0, IMG_HEIGHT]
-        pts[0::2] = np.clip(pts[0::2], 0, IMG_WIDTH)
-        pts[1::2] = np.clip(pts[1::2], 0, IMG_HEIGHT)
+        # Extract current vertex coordinates from the Triangle's vertices tuple
+        xs = np.array([v[0] for v in tri.vertices], dtype=float)
+        ys = np.array([v[1] for v in tri.vertices], dtype=float)
 
-        return tri.replace_vertices(
-            int(pts[0]), int(pts[1]),
-            int(pts[2]), int(pts[3]),
-            int(pts[4]), int(pts[5]),
-        )
+        # Apply noise and clamp to image bounds
+        new_xs = np.clip(xs + noise_x, 0, IMG_WIDTH)
+        new_ys = np.clip(ys + noise_y, 0, IMG_HEIGHT)
+
+        # Reconstruct vertices as tuple of (x, y) pairs and return new Triangle
+        new_vertices = tuple(zip(new_xs.tolist(), new_ys.tolist()))
+        return Triangle(vertices=new_vertices, color=tri.color)
 
     def _perturb_color(
         self,
@@ -338,9 +336,9 @@ class CreepMutation(MutationOperator):
         then clamped to [0, 255].
         """
         noise = rng.uniform(-self.color_delta, self.color_delta, size=4)
-        rgba = np.array(tri.color, dtype=float) + noise
-        rgba = np.clip(rgba, 0, 255).astype(int)
-        return tri.replace_color(tuple(rgba))
+        rgba = np.clip(np.array(tri.color, dtype=float) + noise, 0, 255).astype(int)
+        new_color = tuple(int(c) for c in rgba)
+        return Triangle(vertices=tri.vertices, color=new_color)
 
     def mutate(
         self,
