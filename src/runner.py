@@ -443,7 +443,7 @@ def build_experiment_plan() -> List[RunConfig]:
     Phase 2 - elitism sweep
     Phase 3 - selection sweep
     Phase 4 - crossover sweep
-    Phase 5 - mutation sweep (challenge 3 ablation study)
+    Phase 5 - mutation sweep
     """
     runs: List[RunConfig] = []
 
@@ -533,8 +533,23 @@ def build_experiment_plan() -> List[RunConfig]:
             mutation=mut_name,
             n_elites=5,
         ))
+    
+    # ------------------------------------------------------------------
+    # Phase 6: Best config with more generations
+    # ------------------------------------------------------------------
+    runs.append(RunConfig(
+        name="p6_gaussian_decay_5k",
+        phase=6,
+        description="Best config with 20000 generations",
+        selection="tournament_k10",  # best from phase 3
+        crossover="two_point",       # best from phase 4
+        mutation="gaussian_decay",   # best from phase 5
+        n_elites=5,
+        n_generations=20000,
+    ))
 
     return runs
+
 
 
 # ---------------------------------------------------------------------------
