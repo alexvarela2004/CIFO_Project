@@ -359,6 +359,65 @@ class Triangle:
 
         return cls(vertices=vertices, color=(r, g, b, alpha))
 
+    @classmethod
+    def random_semitransparent(
+        cls,
+        img_width: int,
+        img_height: int,
+        rng: np.random.Generator,
+        alpha_range: Tuple[int, int] = (30, 120),
+    ) -> "Triangle":
+        """Random vertices and color, alpha restricted to semi-transparent range."""
+        xs = rng.uniform(0, img_width, size=3)
+        ys = rng.uniform(0, img_height, size=3)
+        vertices = tuple(zip(xs.tolist(), ys.tolist()))
+        r, g, b = rng.integers(0, 256, size=3).tolist()
+        alpha = int(rng.integers(alpha_range[0], alpha_range[1] + 1))
+        return cls(vertices=vertices, color=(r, g, b, alpha))
+
+    @classmethod
+    def random_small(
+        cls,
+        img_width: int,
+        img_height: int,
+        rng: np.random.Generator,
+        max_size_ratio: float = 0.15,
+    ) -> "Triangle":
+        """Random color, vertices clustered around a random center (bounded size)."""
+        max_w = img_width * max_size_ratio
+        max_h = img_height * max_size_ratio
+        cx = rng.uniform(0, img_width)
+        cy = rng.uniform(0, img_height)
+        xs = np.clip(cx + rng.uniform(-max_w, max_w, size=3), 0, img_width - 1)
+        ys = np.clip(cy + rng.uniform(-max_h, max_h, size=3), 0, img_height - 1)
+        vertices = tuple(zip(xs.tolist(), ys.tolist()))
+        rgba = tuple(rng.integers(0, 256, size=4).tolist())
+        return cls(vertices=vertices, color=rgba)
+
+    @classmethod
+    def from_grid_random_color(
+        cls,
+        cell_x0: float,
+        cell_y0: float,
+        cell_x1: float,
+        cell_y1: float,
+        img_width: int,
+        img_height: int,
+        rng: np.random.Generator,
+        vertex_noise_sigma: float = 0.0,
+    ) -> "Triangle":
+        """Grid-anchored vertices (same as from_grid) but fully random color."""
+        base_xs = np.array([cell_x0, cell_x1, cell_x0], dtype=np.float32)
+        base_ys = np.array([cell_y0, cell_y0, cell_y1], dtype=np.float32)
+        if vertex_noise_sigma > 0.0:
+            base_xs += rng.normal(0, vertex_noise_sigma, size=3)
+            base_ys += rng.normal(0, vertex_noise_sigma, size=3)
+        xs = np.clip(base_xs, 0, img_width - 1)
+        ys = np.clip(base_ys, 0, img_height - 1)
+        vertices = tuple(zip(xs.tolist(), ys.tolist()))
+        rgba = tuple(rng.integers(0, 256, size=4).tolist())
+        return cls(vertices=vertices, color=rgba)
+
     def mutate_vertices(
         self,
         img_width: int,

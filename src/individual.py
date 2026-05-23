@@ -369,6 +369,121 @@ class Individual:
         rng.shuffle(triangles)
         return cls(triangles, fitness_fn, cache_render=cache_render)
 
+    @classmethod
+    def random_semitransparent(
+        cls,
+        fitness_fn: FitnessFunction,
+        rng: np.random.Generator,
+        alpha_range: Tuple[int, int] = (30, 120),
+        cache_render: bool = False,
+    ) -> "Individual":
+        """Random vertices and colors with alpha restricted to a semi-transparent range."""
+        triangles = [
+            Triangle.random_semitransparent(IMG_WIDTH, IMG_HEIGHT, rng, alpha_range=alpha_range)
+            for _ in range(NUM_TRIANGLES)
+        ]
+        return cls(triangles, fitness_fn, cache_render=cache_render)
+
+    @classmethod
+    def random_small(
+        cls,
+        fitness_fn: FitnessFunction,
+        rng: np.random.Generator,
+        max_size_ratio: float = 0.15,
+        cache_render: bool = False,
+    ) -> "Individual":
+        """Random colors, vertices constrained to small triangles (bounded size)."""
+        triangles = [
+            Triangle.random_small(IMG_WIDTH, IMG_HEIGHT, rng, max_size_ratio=max_size_ratio)
+            for _ in range(NUM_TRIANGLES)
+        ]
+        return cls(triangles, fitness_fn, cache_render=cache_render)
+
+    @classmethod
+    def from_grid_random_color(
+        cls,
+        fitness_fn: FitnessFunction,
+        rng: np.random.Generator,
+        n_cols: int = 10,
+        n_rows: int = 10,
+        vertex_noise_sigma: Optional[float] = None,
+        cache_render: bool = False,
+    ) -> "Individual":
+        """Grid-anchored coverage (same as from_grid) but fully random colors."""
+        cell_w = IMG_WIDTH / n_cols
+        cell_h = IMG_HEIGHT / n_rows
+        if vertex_noise_sigma is None:
+            vertex_noise_sigma = 0.3 * min(cell_w, cell_h)
+        candidates: List[Triangle] = []
+        for row in range(n_rows):
+            for col in range(n_cols):
+                x0 = col * cell_w
+                y0 = row * cell_h
+                x1 = x0 + cell_w
+                y1 = y0 + cell_h
+                candidates.append(Triangle.from_grid_random_color(
+                    x0, y0, x1, y1, IMG_WIDTH, IMG_HEIGHT, rng,
+                    vertex_noise_sigma=vertex_noise_sigma,
+                ))
+                candidates.append(Triangle.from_grid_random_color(
+                    x1, y0, x1, y1, IMG_WIDTH, IMG_HEIGHT, rng,
+                    vertex_noise_sigma=vertex_noise_sigma,
+                ))
+        if len(candidates) >= NUM_TRIANGLES:
+            indices = rng.choice(len(candidates), size=NUM_TRIANGLES, replace=False)
+            triangles = [candidates[i] for i in indices]
+        else:
+            triangles = candidates + [
+                Triangle.random(IMG_WIDTH, IMG_HEIGHT, rng)
+                for _ in range(NUM_TRIANGLES - len(candidates))
+            ]
+        rng.shuffle(triangles)
+        return cls(triangles, fitness_fn, cache_render=cache_render)
+
+    @classmethod
+    def random_sorted_alpha(
+        cls,
+        fitness_fn: FitnessFunction,
+        rng: np.random.Generator,
+        cache_render: bool = False,
+    ) -> "Individual":
+        """Random triangles sorted by alpha descending: most opaque at bottom layer."""
+        triangles = [Triangle.random(IMG_WIDTH, IMG_HEIGHT, rng) for _ in range(NUM_TRIANGLES)]
+        triangles.sort(key=lambda t: t.alpha, reverse=True)
+        return cls(triangles, fitness_fn, cache_render=cache_render)
+
+    @classmethod
+    def random_quadrant(
+        cls,
+        fitness_fn: FitnessFunction,
+        rng: np.random.Generator,
+        n_cols: int = 5,
+        n_rows: int = 5,
+        cache_render: bool = False,
+    ) -> "Individual":
+        """Random colors, vertices constrained per quadrant for guaranteed coverage."""
+        n_cells = n_cols * n_rows
+        per_cell = NUM_TRIANGLES // n_cells
+        remainder = NUM_TRIANGLES % n_cells
+        cell_w = IMG_WIDTH / n_cols
+        cell_h = IMG_HEIGHT / n_rows
+        triangles: List[Triangle] = []
+        for row in range(n_rows):
+            for col in range(n_cols):
+                x0 = col * cell_w
+                y0 = row * cell_h
+                x1 = x0 + cell_w
+                y1 = y0 + cell_h
+                n = per_cell + (1 if row * n_cols + col < remainder else 0)
+                for _ in range(n):
+                    xs = rng.uniform(x0, x1, size=3)
+                    ys = rng.uniform(y0, y1, size=3)
+                    vertices = tuple(zip(xs.tolist(), ys.tolist()))
+                    rgba = tuple(rng.integers(0, 256, size=4).tolist())
+                    triangles.append(Triangle(vertices=vertices, color=rgba))
+        rng.shuffle(triangles)
+        return cls(triangles, fitness_fn, cache_render=cache_render)
+
     def copy_with(
         self,
         triangles: Optional[Sequence[Triangle]] = None,

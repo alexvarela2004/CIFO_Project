@@ -491,6 +491,17 @@ class GeneticAlgorithm:
                 "Pass target=your_image_array to run()."
             )
 
+        _KNOWN_STRATEGIES = {
+            "random", "image", "mixed", "grid",
+            "semi_transparent", "small_random", "grid_random_color",
+            "sorted_alpha", "quadrant",
+        }
+        if init_strategy not in _KNOWN_STRATEGIES:
+            raise ValueError(
+                f"Unknown init_strategy='{init_strategy}'. "
+                f"Must be one of: {sorted(_KNOWN_STRATEGIES)}"
+            )
+
         start_time = time.time()
 
         logger.info(
@@ -510,6 +521,26 @@ class GeneticAlgorithm:
         elif init_strategy == "grid":
             population = Population.from_grid(
                 cfg.population_size, self._fitness_fn, self._rng, target
+            )
+        elif init_strategy == "semi_transparent":
+            population = Population.random_semitransparent(
+                cfg.population_size, self._fitness_fn, self._rng
+            )
+        elif init_strategy == "small_random":
+            population = Population.random_small(
+                cfg.population_size, self._fitness_fn, self._rng
+            )
+        elif init_strategy == "grid_random_color":
+            population = Population.from_grid_random_color(
+                cfg.population_size, self._fitness_fn, self._rng
+            )
+        elif init_strategy == "sorted_alpha":
+            population = Population.random_sorted_alpha(
+                cfg.population_size, self._fitness_fn, self._rng
+            )
+        elif init_strategy == "quadrant":
+            population = Population.random_quadrant(
+                cfg.population_size, self._fitness_fn, self._rng
             )
         else:
             population = Population.random(

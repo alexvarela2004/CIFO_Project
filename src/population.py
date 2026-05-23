@@ -249,6 +249,97 @@ class Population:
         ]
         return cls(individuals)
 
+    @classmethod
+    def random_semitransparent(
+        cls,
+        size: int,
+        fitness_fn: FitnessFunction,
+        rng: np.random.Generator,
+        alpha_range: tuple = (30, 120),
+    ) -> "Population":
+        """Population with random semi-transparent triangles (alpha restricted)."""
+        if size < 2:
+            raise ValueError(f"Population size must be >= 2, got {size}.")
+        individuals = [
+            Individual.random_semitransparent(fitness_fn, rng, alpha_range=alpha_range)
+            for _ in range(size)
+        ]
+        return cls(individuals)
+
+    @classmethod
+    def random_small(
+        cls,
+        size: int,
+        fitness_fn: FitnessFunction,
+        rng: np.random.Generator,
+        max_size_ratio: float = 0.15,
+    ) -> "Population":
+        """Population with small random triangles (bounded vertex spread)."""
+        if size < 2:
+            raise ValueError(f"Population size must be >= 2, got {size}.")
+        individuals = [
+            Individual.random_small(fitness_fn, rng, max_size_ratio=max_size_ratio)
+            for _ in range(size)
+        ]
+        return cls(individuals)
+
+    @classmethod
+    def from_grid_random_color(
+        cls,
+        size: int,
+        fitness_fn: FitnessFunction,
+        rng: np.random.Generator,
+        n_cols: int = 10,
+        n_rows: int = 10,
+        vertex_noise_sigma: Optional[float] = None,
+    ) -> "Population":
+        """Population with grid-anchored coverage and fully random colors."""
+        if size < 2:
+            raise ValueError(f"Population size must be >= 2, got {size}.")
+        individuals = [
+            Individual.from_grid_random_color(
+                fitness_fn, rng,
+                n_cols=n_cols, n_rows=n_rows,
+                vertex_noise_sigma=vertex_noise_sigma,
+            )
+            for _ in range(size)
+        ]
+        return cls(individuals)
+
+    @classmethod
+    def random_sorted_alpha(
+        cls,
+        size: int,
+        fitness_fn: FitnessFunction,
+        rng: np.random.Generator,
+    ) -> "Population":
+        """Population with random triangles sorted by alpha (opaque at bottom)."""
+        if size < 2:
+            raise ValueError(f"Population size must be >= 2, got {size}.")
+        individuals = [
+            Individual.random_sorted_alpha(fitness_fn, rng)
+            for _ in range(size)
+        ]
+        return cls(individuals)
+
+    @classmethod
+    def random_quadrant(
+        cls,
+        size: int,
+        fitness_fn: FitnessFunction,
+        rng: np.random.Generator,
+        n_cols: int = 5,
+        n_rows: int = 5,
+    ) -> "Population":
+        """Population with triangles guaranteed to cover every canvas quadrant."""
+        if size < 2:
+            raise ValueError(f"Population size must be >= 2, got {size}.")
+        individuals = [
+            Individual.random_quadrant(fitness_fn, rng, n_cols=n_cols, n_rows=n_rows)
+            for _ in range(size)
+        ]
+        return cls(individuals)
+
     # ------------------------------------------------------------------
     # Properties
     # ------------------------------------------------------------------
