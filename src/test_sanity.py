@@ -312,6 +312,7 @@ except Exception:
 section("GA engine (mini run: 3 generations, population=4)")
 
 from ga import GeneticAlgorithm, GAConfig, EarlyStopping
+from runner import RunConfig
 
 try:
     config = GAConfig(
@@ -358,6 +359,48 @@ try:
 except Exception:
     traceback.print_exc()
     run_check("GA engine section completed without exception", False)
+
+# ---------------------------------------------------------------------------
+# 8. RunConfig fields
+# ---------------------------------------------------------------------------
+section("RunConfig fields")
+
+try:
+    def test_run_config_has_init_strategy_field():
+        """RunConfig must expose init_strategy with default 'random'."""
+        cfg = RunConfig(
+            name="test",
+            phase=0,
+            description="test",
+            selection="tournament_k3",
+            crossover="uniform",
+            mutation="gaussian_fixed",
+            n_elites=1,
+        )
+        assert cfg.init_strategy == "random"
+
+    def test_run_config_has_image_ratio_field():
+        """RunConfig must expose image_ratio with default 0.5."""
+        cfg = RunConfig(
+            name="test",
+            phase=0,
+            description="test",
+            selection="tournament_k3",
+            crossover="uniform",
+            mutation="gaussian_fixed",
+            n_elites=1,
+        )
+        assert cfg.image_ratio == 0.5
+
+    test_run_config_has_init_strategy_field()
+    run_check("RunConfig.init_strategy exists with default 'random'", True)
+
+    test_run_config_has_image_ratio_field()
+    run_check("RunConfig.image_ratio exists with default 0.5", True)
+
+except Exception:
+    traceback.print_exc()
+    run_check("RunConfig fields section completed without exception", False)
 
 # ---------------------------------------------------------------------------
 # Summary
