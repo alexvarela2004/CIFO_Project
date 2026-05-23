@@ -90,7 +90,7 @@ logger = logging.getLogger("runner")
 # Constants
 # ---------------------------------------------------------------------------
 
-OUTPUT_ROOT = "../runner_outputs"
+OUTPUT_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "runner_outputs")
 RESULTS_CSV = os.path.join(OUTPUT_ROOT, "results.csv")
 
 N_GENERATIONS = 3000
@@ -550,8 +550,27 @@ def build_experiment_plan() -> List[RunConfig]:
         n_generations=20000,
     ))
 
-    return runs
+    # ------------------------------------------------------------------
+    # Phase 7: Init strategy sweep
+    # ------------------------------------------------------------------
+    for strategy in [
+        "random", "image", "mixed", "grid",
+        "semi_transparent", "small_random", "grid_random_color",
+        "sorted_alpha", "quadrant",
+    ]:
+        runs.append(RunConfig(
+            name=f"p7_init_{strategy}",
+            phase=7,
+            description=f"Init strategy sweep - {strategy}",
+            selection="tournament_k10",
+            crossover="two_point",
+            mutation="gaussian_decay",
+            n_elites=5,
+            n_generations=3000,
+            init_strategy=strategy,
+        ))
 
+    return runs
 
 
 # ---------------------------------------------------------------------------
