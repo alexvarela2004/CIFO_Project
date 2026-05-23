@@ -120,6 +120,8 @@ class RunConfig:
     population_size: int = POPULATION_SIZE
     n_generations: int = N_GENERATIONS
     crossover_rate: float = CROSSOVER_RATE
+    init_strategy: str = "random"
+    image_ratio: float = 0.5
     extra: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
@@ -355,7 +357,7 @@ def execute_single_run(cfg: RunConfig, seed: int, target: np.ndarray) -> dict:
             )
 
     t0 = time.time()
-    best = ga.run(target=target, init_strategy="random", callback=_callback)
+    best = ga.run(target=target, init_strategy=cfg.init_strategy, image_ratio=cfg.image_ratio, callback=_callback)
     elapsed = time.time() - t0
 
     save_render(render(best.triangles), os.path.join(directory, "best_final.png"))
