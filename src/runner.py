@@ -208,45 +208,76 @@ def make_crossover(name: str):
     raise ValueError(f"Unknown crossover: {name}")
 
 
-def make_mutation(name: str, n_generations: int):
+def make_mutation(name: str, n_generations: int, extra: dict = None):
     """
     Returns (mutation_operator, scheduler_or_None).
     n_generations is passed so decay schedulers are calibrated to the run length.
     """
+    extra = extra or {}
+    mutation_rate = extra.get("mutation_rate", 0.05)
+
     if name == "gaussian_fixed":
-        op = GaussianMutation(mutation_rate=0.05, vertex_sigma=15.0, color_sigma=15.0)
+        op = GaussianMutation(
+            mutation_rate=mutation_rate,
+            vertex_sigma=extra.get("vertex_sigma_max", 15.0),
+            color_sigma=extra.get("color_sigma_max",   15.0),
+        )
         return op, None
 
     if name == "creep_fixed":
-        op = CreepMutation(mutation_rate=0.05, vertex_delta=15.0, color_delta=15.0)
+        op = CreepMutation(
+            mutation_rate=mutation_rate,
+            vertex_delta=extra.get("vertex_delta_max", 15.0),
+            color_delta=extra.get("color_delta_max",   15.0),
+        )
         return op, None
 
     if name == "gaussian_decay":
-        op = GaussianMutation(mutation_rate=0.05, vertex_sigma=40.0, color_sigma=40.0)
+        vertex_sigma_max = extra.get("vertex_sigma_max", 40.0)
+        vertex_sigma_min = extra.get("vertex_sigma_min", 2.0)
+        color_sigma_max  = extra.get("color_sigma_max",  40.0)
+        color_sigma_min  = extra.get("color_sigma_min",  2.0)
+        op = GaussianMutation(
+            mutation_rate=mutation_rate,
+            vertex_sigma=vertex_sigma_max,
+            color_sigma=color_sigma_max,
+        )
         scheduler = SigmaDecayScheduler(
             mutation=op,
             n_generations=n_generations,
-            vertex_sigma_max=40.0,
-            vertex_sigma_min=2.0,
-            color_sigma_max=40.0,
-            color_sigma_min=2.0,
+            vertex_sigma_max=vertex_sigma_max,
+            vertex_sigma_min=vertex_sigma_min,
+            color_sigma_max=color_sigma_max,
+            color_sigma_min=color_sigma_min,
         )
         return op, scheduler
 
     if name == "creep_decay":
-        op = CreepMutation(mutation_rate=0.05, vertex_delta=30.0, color_delta=30.0)
+        vertex_delta_max = extra.get("vertex_delta_max", 30.0)
+        vertex_delta_min = extra.get("vertex_delta_min", 1.0)
+        color_delta_max  = extra.get("color_delta_max",  30.0)
+        color_delta_min  = extra.get("color_delta_min",  1.0)
+        op = CreepMutation(
+            mutation_rate=mutation_rate,
+            vertex_delta=vertex_delta_max,
+            color_delta=color_delta_max,
+        )
         scheduler = DeltaDecayScheduler(
             mutation=op,
             n_generations=n_generations,
-            vertex_delta_max=30.0,
-            vertex_delta_min=1.0,
-            color_delta_max=30.0,
-            color_delta_min=1.0,
+            vertex_delta_max=vertex_delta_max,
+            vertex_delta_min=vertex_delta_min,
+            color_delta_max=color_delta_max,
+            color_delta_min=color_delta_min,
         )
         return op, scheduler
 
     if name == "composite_gaussian":
-        gaussian = GaussianMutation(mutation_rate=0.05, vertex_sigma=15.0, color_sigma=15.0)
+        gaussian = GaussianMutation(
+            mutation_rate=mutation_rate,
+            vertex_sigma=extra.get("vertex_sigma_max", 15.0),
+            color_sigma=extra.get("color_sigma_max",   15.0),
+        )
         op = CompositeMutation([
             gaussian,
             ResetMutation(mutation_rate=0.01),
@@ -255,7 +286,11 @@ def make_mutation(name: str, n_generations: int):
         return op, None
 
     if name == "composite_creep":
-        creep = CreepMutation(mutation_rate=0.05, vertex_delta=15.0, color_delta=15.0)
+        creep = CreepMutation(
+            mutation_rate=mutation_rate,
+            vertex_delta=extra.get("vertex_delta_max", 15.0),
+            color_delta=extra.get("color_delta_max",   15.0),
+        )
         op = CompositeMutation([
             creep,
             ResetMutation(mutation_rate=0.01),
@@ -264,7 +299,6 @@ def make_mutation(name: str, n_generations: int):
         return op, None
 
     raise ValueError(f"Unknown mutation: {name}")
-
 
 # ---------------------------------------------------------------------------
 # Core single-seed run
@@ -290,7 +324,7 @@ def execute_single_run(cfg: RunConfig, seed: int, target: np.ndarray) -> dict:
     fitness_fn = RMSEFitness(target)
     selection = make_selection(cfg.selection, **cfg.extra)
     crossover = make_crossover(cfg.crossover)
-    mutation_op, scheduler = make_mutation(cfg.mutation, cfg.n_generations)
+    mutation_op, scheduler = make_mutation(cfg.mutation, cfg.n_generations, extra=cfg.extra)
 
     plain_es = EarlyStopping(patience=100, tolerance=1e-4)
     diversity_es = DiversityAwareEarlyStopping(
@@ -569,6 +603,117 @@ def build_experiment_plan() -> List[RunConfig]:
             n_generations=3000,
             init_strategy=strategy,
         ))
+
+    # ------------------------------------------------------------------
+    # Phase 8: Elitism re-test with best operators
+    # ------------------------------------------------------------------
+    for n_elites in [1, 3, 7, 10]:  #5 ja foi testada na fase 5 
+        runs.append(RunConfig(
+            name=f"p8_elites_{n_elites}",
+            phase=8,
+            description=f"Elitism retest (best operators) - {n_elites} elites",
+            selection="tournament_k10",
+            crossover="blend",
+            mutation="gaussian_decay",
+            n_elites=n_elites,
+            n_generations=3000,
+        ))
+
+    # ---------------------------------------------------------------------------
+    # Phase 9: Interaction check — tournament_k5 with best mutations
+    # ---------------------------------------------------------------------------
+    #nao testamos a melhor selection com as 2 melhores mutations pq ja se fez isso na fase 5
+    # nao testamos crossover porque spread é tão pequeno, qualquer diferença entre crossovers está provavelmente dentro da variação aleatória entre seeds — ou seja, não é estatisticamente significativa.
+
+    for mut in ["gaussian_decay", "creep_decay"]:
+        runs.append(RunConfig(
+            name=f"p9_k5_{mut}",
+            phase=9,
+            description=f"Interaction check - tournament_k5 + blend + {mut}",
+            selection="tournament_k5",
+            crossover="blend",
+            mutation=mut,
+            n_elites=5,  # susbtituir pelo melhor da fase 8
+            n_generations=3000,
+        ))
+
+    # ------------------------------------------------------------------
+    # Phase 10: Grid search — mutation_rate × vertex_sigma_max
+    # Testa a interação entre frequência e magnitude das perturbações
+    # ------------------------------------------------------------------
+
+    for rate in [0.01, 0.05, 0.10, 0.20]:
+        for sigma_max in [15.0, 40.0, 80.0]:
+
+            # não re-correr o que já existe na fase 5
+            if rate == 0.05 and sigma_max == 40.0:
+                continue
+
+            runs.append(RunConfig(
+                name=f"p10_rate_{str(rate).replace('.','')}_sigmax_{int(sigma_max)}",
+                phase=10,
+                description=f"Grid search - mutation_rate={rate}, vertex_sigma_max={sigma_max}",
+                selection="tournament_k10", #garantir que continua a ser apos fase 9
+                crossover="blend",
+                mutation="gaussian_decay", #garantir que continua a ser apos fase 9
+                n_elites=7, # melhor da fase 8
+                n_generations=3000,
+                extra={
+                    "mutation_rate": rate,
+                    "vertex_sigma_max": sigma_max,
+                    "color_sigma_max": sigma_max,
+                },
+            ))
+
+
+    # ------------------------------------------------------------------
+    # Phase 11: restantes hiperparâmetros
+    # ------------------------------------------------------------------
+
+    BEST_P10 = dict(
+        selection="tournament_k10", #garantir que continua a ser apos fase 9
+        crossover="blend",
+        mutation="gaussian_decay", #garantir que continua a ser apos fase 9
+        n_elites=7, # melhor da fase 8
+        n_generations=3000,
+    )
+
+    BEST_P10_EXTRA = {
+    "mutation_rate": 0.05,    # atualizar após Fase 10
+    "vertex_sigma_max": 40.0, # atualizar após Fase 10
+    "color_sigma_max": 40.0,  # atualizar após Fase 10 (igual a sigma_max)
+    }
+
+    for sigma_min in [0.5, 4.0]:
+        runs.append(RunConfig(
+            name=f"p11_sigmin_{str(sigma_min).replace('.', '')}",
+            phase=11,
+            description=f"OFAT - vertex_sigma_min={sigma_min}",
+            extra={**BEST_P10_EXTRA, "vertex_sigma_min": sigma_min, "color_sigma_min": sigma_min},
+            **BEST_P10,
+        ))
+
+    for pop in [80, 100, 130, 150]:
+        runs.append(RunConfig(
+            name=f"p11_pop_{pop}",
+            phase=11,
+            description=f"OFAT - population_size={pop}",
+            population_size=pop,
+            extra=BEST_P10_EXTRA,
+            **BEST_P10,
+        ))
+
+    for xrate in [0.6, 1.0]:
+        runs.append(RunConfig(
+            name=f"p11_xrate_{str(xrate).replace('.', '')}",
+            phase=11,
+            description=f"OFAT - crossover_rate={xrate}",
+            crossover_rate=xrate,
+            extra=BEST_P10_EXTRA,
+            **BEST_P10,
+        ))
+
+    
 
     return runs
 
