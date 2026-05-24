@@ -7,7 +7,7 @@ Mutation introduces random variation into offspring chromosomes. It is the
 primary source of genetic diversity beyond what crossover can recombine,
 and is essential for escaping local optima.
 
-Five concrete strategies are provided:
+Five concrete operators are provided:
 
     1. GaussianMutation     — perturbs vertices and/or color of randomly
                               selected triangles with Gaussian noise.
@@ -23,10 +23,21 @@ Five concrete strategies are provided:
     4. SwapMutation         — swaps the draw-order positions of two triangles.
                               Explores the ordering space without changing
                               triangle geometry or color.
-    5. CompositeMutation    — applies multiple mutation operators in sequence
-                              with configurable probabilities. Recommended for
-                              the main GA run as it combines fine and coarse
-                              search in a single operator.
+    5. CompositeMutation    — applies multiple mutation operators in sequence.
+                              Recommended for the main GA run as it combines
+                              fine and coarse search in a single operator.
+
+Four adaptive decay schedulers are also provided:
+
+    1. SigmaDecayScheduler           — exponential decay of GaussianMutation
+                                       sigma parameters over generations.
+    2. DeltaDecayScheduler           — exponential decay of CreepMutation
+                                       delta parameters over generations.
+    3. CompositeSigmaDecayScheduler  — sigma decay targeting the inner
+                                       GaussianMutation of a CompositeMutation.
+    4. AsymmetricSigmaDecayScheduler — independent decay rates for vertex
+                                       and color sigma; colour stabilises
+                                       before geometry by default.
 
 Design notes:
     - MutationOperator is an abstract base class. The GA engine calls
@@ -36,10 +47,9 @@ Design notes:
       a 5% chance of being mutated independently — on average 5 triangles
       per individual per generation.
     - All operators return new Individual instances (immutability contract).
-    - Sigma parameters for Gaussian noise should be tuned alongside
-      mutation_rate: high sigma + high rate = exploration; low sigma +
-      low rate = exploitation. The GA engine may implement sigma decay
-      (adaptive mutation) over generations.
+    - Sigma/delta parameters should be tuned alongside mutation_rate:
+      high sigma + high rate = exploration; low sigma + low rate = exploitation.
+      The decay schedulers automate this annealing over generations.
 """
 
 from __future__ import annotations
@@ -51,7 +61,7 @@ import numpy as np
 
 from individual import Individual, NUM_TRIANGLES
 from triangle import Triangle
-from utils import IMG_WIDTH, IMG_HEIGHT
+from ga_utils import IMG_WIDTH, IMG_HEIGHT
 
 
 # ---------------------------------------------------------------------------
@@ -404,120 +414,224 @@ class CreepMutation(MutationOperator):
 
 
 # ---------------------------------------------------------------------------
-# Delta decay scheduler (mirrors SigmaDecayScheduler for CreepMutation)
+# Reset mutation
 # ---------------------------------------------------------------------------
 
-class DeltaDecayScheduler:
+class ResetMutation(MutationOperator):
     """
-    Exponential decay schedule for CreepMutation delta parameters.
+    Random gene reset mutation.
 
-    Mirrors SigmaDecayScheduler exactly, but targets a CreepMutation instance
-    instead of GaussianMutation. Starts with a large delta (broad bounded
-    exploration) and anneals it toward a small value (fine refinement).
+    For each triangle, independently decides (Bernoulli trial) whether to
+    replace it with an entirely new randomly initialised triangle. This is
+    a coarse-grained operator: it does not refine existing triangles but
+    instead injects fresh random material into the chromosome.
 
-    The decay formula is identical:
-
-        delta(t) = delta_max * (delta_min / delta_max) ** (t / T)
-
-    At t=0: delta = delta_max. At t=T: delta = delta_min.
-
-    Usage
-    -----
-        scheduler = DeltaDecayScheduler(
-            mutation=creep_mut,
-            n_generations=500,
-            vertex_delta_max=30.0,
-            vertex_delta_min=1.0,
-            color_delta_max=30.0,
-            color_delta_min=1.0,
-        )
-        ga.run(target=target_array, callback=scheduler)
+    Use cases
+    ---------
+    - Early generations: high reset rate accelerates initial exploration.
+    - Stagnation recovery: if the GA is stuck in a local optimum, a burst
+      of reset mutations can perturb the population enough to escape.
+    - Complementary to GaussianMutation in CompositeMutation: Gaussian
+      handles fine-grained local search, reset handles coarse exploration.
 
     Parameters
     ----------
-    mutation : CreepMutation
-        The mutation operator whose delta values are updated each generation.
-    n_generations : int
-        Total number of generations (matches GAConfig.n_generations).
-    vertex_delta_max : float
-        Starting half-width for vertex coordinate noise. Default 30.0.
-    vertex_delta_min : float
-        Final half-width for vertex coordinate noise. Default 1.0.
-    color_delta_max : float
-        Starting half-width for color channel noise. Default 30.0.
-    color_delta_min : float
-        Final half-width for color channel noise. Default 1.0.
-    extra_callback : callable, optional
-        Additional callback chained after delta update, with signature
-        (generation, best, stats).
+    mutation_rate : float
+        Per-triangle probability of replacement. Default is 0.02.
+        Lower than GaussianMutation because resets are destructive —
+        they discard all information in the replaced gene.
     """
 
-    def __init__(
-        self,
-        mutation: CreepMutation,
-        n_generations: int,
-        vertex_delta_max: float = 30.0,
-        vertex_delta_min: float = 1.0,
-        color_delta_max: float  = 30.0,
-        color_delta_min: float  = 1.0,
-        extra_callback: Optional[callable] = None,
-    ) -> None:
-        self._mutation       = mutation
-        self._n_generations  = n_generations
-        self._v_max          = vertex_delta_max
-        self._v_min          = vertex_delta_min
-        self._c_max          = color_delta_max
-        self._c_min          = color_delta_min
-        self._extra_callback = extra_callback
-        self.delta_log: List[dict] = []
+    def __init__(self, mutation_rate: float = 0.02) -> None:
+        if not (0.0 <= mutation_rate <= 1.0):
+            raise ValueError(
+                f"mutation_rate must be in [0.0, 1.0], got {mutation_rate}."
+            )
+        self.mutation_rate = mutation_rate
 
-    def __call__(
+    def mutate(
         self,
-        generation: int,
-        best: "Individual",
-        stats: dict,
-    ) -> None:
+        individual: Individual,
+        rng: np.random.Generator,
+    ) -> Individual:
         """
-        Update delta for the current generation and log the values.
-
-        Called automatically by the GA engine at the end of each generation.
+        Replace selected triangles with random ones.
 
         Parameters
         ----------
-        generation : int
-            Current generation index (0 = initial population).
-        best : Individual
-            Best individual in the current generation.
-        stats : dict
-            Generation statistics dict from the GA engine log.
+        individual : Individual
+            Source individual (not modified).
+        rng : np.random.Generator
+            Used for Bernoulli trials and generating random triangles.
+
+        Returns
+        -------
+        Individual
+            New individual with selected genes replaced by random triangles.
         """
-        T = max(self._n_generations, 1)
-        t = min(generation, T)
+        triangles = list(individual.triangles)
+        reset_mask = rng.random(size=NUM_TRIANGLES) < self.mutation_rate
 
-        decay   = t / T
-        v_delta = self._v_max * (self._v_min / self._v_max) ** decay
-        c_delta = self._c_max * (self._c_min / self._c_max) ** decay
+        for i, do_reset in enumerate(reset_mask):
+            if do_reset:
+                triangles[i] = Triangle.random(IMG_WIDTH, IMG_HEIGHT, rng)
 
-        self._mutation.set_delta(v_delta, c_delta)
-
-        self.delta_log.append({
-            "generation":   generation,
-            "vertex_delta": round(v_delta, 4),
-            "color_delta":  round(c_delta, 4),
-        })
-
-        if self._extra_callback is not None:
-            self._extra_callback(generation, best, stats)
+        return individual.copy_with(triangles)
 
     def __repr__(self) -> str:
-        return (
-            f"DeltaDecayScheduler("
-            f"v_delta={self._v_max}->{self._v_min}, "
-            f"c_delta={self._c_max}->{self._c_min}, "
-            f"n_generations={self._n_generations})"
-        )
+        return f"ResetMutation(rate={self.mutation_rate})"
 
 
+# ---------------------------------------------------------------------------
+# Swap mutation
+# ---------------------------------------------------------------------------
+
+class SwapMutation(MutationOperator):
+    """
+    Draw-order swap mutation.
+
+    Randomly selects n_swaps pairs of triangles and swaps their positions
+    in the draw order. Geometry and color are unchanged — only the layering
+    order is modified.
+
+    Motivation
+    ----------
+    Draw order determines which triangles occlude which. A triangle that is
+    currently being covered by others may produce much better results if
+    moved to the top of the stack (or vice versa). This operator explores
+    the ordering space without discarding any triangle's shape or color,
+    making it non-destructive in terms of the genetic material it carries.
+
+    Parameters
+    ----------
+    mutation_rate : float
+        Probability of applying any swap at all to an individual.
+        Default is 0.3 (swaps are applied to 30% of individuals).
+    n_swaps : int
+        Number of pair-swaps to perform when the operator fires.
+        Default is 2.
+    """
+
+    def __init__(self, mutation_rate: float = 0.3, n_swaps: int = 2) -> None:
+        if not (0.0 <= mutation_rate <= 1.0):
+            raise ValueError(
+                f"mutation_rate must be in [0.0, 1.0], got {mutation_rate}."
+            )
+        if n_swaps < 1:
+            raise ValueError(f"n_swaps must be >= 1, got {n_swaps}.")
+        self.mutation_rate = mutation_rate
+        self.n_swaps = n_swaps
+
+    def mutate(
+        self,
+        individual: Individual,
+        rng: np.random.Generator,
+    ) -> Individual:
+        """
+        Apply n_swaps random draw-order swaps if the Bernoulli trial succeeds.
+
+        Parameters
+        ----------
+        individual : Individual
+            Source individual (not modified).
+        rng : np.random.Generator
+            Used for the overall trigger trial and swap index sampling.
+
+        Returns
+        -------
+        Individual
+            New individual with swapped draw order, or a copy of the
+            original if the trigger trial did not fire.
+        """
+        # Per-individual trigger — swap mutation fires at the individual level
+        if rng.random() >= self.mutation_rate:
+            return individual.copy_with()
+
+        triangles = list(individual.triangles)
+        n = len(triangles)
+
+        for _ in range(self.n_swaps):
+            i, j = rng.integers(0, n, size=2)
+            if i != j:
+                triangles[i], triangles[j] = triangles[j], triangles[i]
+
+        return individual.copy_with(triangles)
+
+    def __repr__(self) -> str:
+        return f"SwapMutation(rate={self.mutation_rate}, n_swaps={self.n_swaps})"
+
+
+# ---------------------------------------------------------------------------
+# Composite mutation
+# ---------------------------------------------------------------------------
+
+class CompositeMutation(MutationOperator):
+    """
+    Composite mutation that applies multiple operators in sequence.
+
+    Each registered operator is applied independently to the individual,
+    in registration order. The output of operator i is fed as input to
+    operator i+1, so effects accumulate.
+
+    This is the recommended operator for the main GA run because it
+    combines fine-grained local search (GaussianMutation) with occasional
+    coarse perturbation (ResetMutation) and order exploration (SwapMutation)
+    in a single unified operator — without requiring the GA engine to manage
+    multiple operator calls.
+
+    Example
+    -------
+    >>> composite = CompositeMutation([
+    ...     CreepMutation(mutation_rate=0.05, vertex_delta=15.0),
+    ...     ResetMutation(mutation_rate=0.01),
+    ...     SwapMutation(mutation_rate=0.2, n_swaps=1),
+    ... ])
+
+    To benchmark Gaussian vs creep, swap CreepMutation for GaussianMutation
+    keeping all other parameters fixed — the only difference is the noise
+    distribution shape.
+
+    Parameters
+    ----------
+    operators : sequence of MutationOperator
+        Operators applied in order. Must contain at least one operator.
+    """
+
+    def __init__(self, operators: Sequence[MutationOperator]) -> None:
+        if not operators:
+            raise ValueError("CompositeMutation requires at least one operator.")
+        self.operators: List[MutationOperator] = list(operators)
+
+    def mutate(
+        self,
+        individual: Individual,
+        rng: np.random.Generator,
+    ) -> Individual:
+        """
+        Apply all registered operators in sequence.
+
+        Parameters
+        ----------
+        individual : Individual
+            Source individual. Each operator receives the output of the
+            previous one, so mutations accumulate across the chain.
+        rng : np.random.Generator
+            Shared random generator passed to all operators.
+
+        Returns
+        -------
+        Individual
+            Individual after all operators have been applied.
+        """
+        result = individual
+        for operator in self.operators:
+            result = operator.mutate(result, rng)
+        return result
+
+    def __repr__(self) -> str:
+        ops_repr = ", ".join(repr(op) for op in self.operators)
+        return f"CompositeMutation([{ops_repr}])"
+    
 # ---------------------------------------------------------------------------
 # Sigma decay scheduler
 # ---------------------------------------------------------------------------
@@ -644,222 +758,309 @@ class SigmaDecayScheduler:
             f"n_generations={self._n_generations})"
         )
 
-
 # ---------------------------------------------------------------------------
-# Concrete implementation 2: Reset mutation
+# Delta decay scheduler (mirrors SigmaDecayScheduler for CreepMutation)
 # ---------------------------------------------------------------------------
 
-class ResetMutation(MutationOperator):
+class DeltaDecayScheduler:
     """
-    Random gene reset mutation.
+    Exponential decay schedule for CreepMutation delta parameters.
 
-    For each triangle, independently decides (Bernoulli trial) whether to
-    replace it with an entirely new randomly initialised triangle. This is
-    a coarse-grained operator: it does not refine existing triangles but
-    instead injects fresh random material into the chromosome.
+    Mirrors SigmaDecayScheduler exactly, but targets a CreepMutation instance
+    instead of GaussianMutation. Starts with a large delta (broad bounded
+    exploration) and anneals it toward a small value (fine refinement).
 
-    Use cases
-    ---------
-    - Early generations: high reset rate accelerates initial exploration.
-    - Stagnation recovery: if the GA is stuck in a local optimum, a burst
-      of reset mutations can perturb the population enough to escape.
-    - Complementary to GaussianMutation in CompositeMutation: Gaussian
-      handles fine-grained local search, reset handles coarse exploration.
+    The decay formula is identical:
+
+        delta(t) = delta_max * (delta_min / delta_max) ** (t / T)
+
+    At t=0: delta = delta_max. At t=T: delta = delta_min.
+
+    Usage
+    -----
+        scheduler = DeltaDecayScheduler(
+            mutation=creep_mut,
+            n_generations=500,
+            vertex_delta_max=30.0,
+            vertex_delta_min=1.0,
+            color_delta_max=30.0,
+            color_delta_min=1.0,
+        )
+        ga.run(target=target_array, callback=scheduler)
 
     Parameters
     ----------
-    mutation_rate : float
-        Per-triangle probability of replacement. Default is 0.02.
-        Lower than GaussianMutation because resets are destructive —
-        they discard all information in the replaced gene.
+    mutation : CreepMutation
+        The mutation operator whose delta values are updated each generation.
+    n_generations : int
+        Total number of generations (matches GAConfig.n_generations).
+    vertex_delta_max : float
+        Starting half-width for vertex coordinate noise. Default 30.0.
+    vertex_delta_min : float
+        Final half-width for vertex coordinate noise. Default 1.0.
+    color_delta_max : float
+        Starting half-width for color channel noise. Default 30.0.
+    color_delta_min : float
+        Final half-width for color channel noise. Default 1.0.
+    extra_callback : callable, optional
+        Additional callback chained after delta update, with signature
+        (generation, best, stats).
     """
 
-    def __init__(self, mutation_rate: float = 0.02) -> None:
-        if not (0.0 <= mutation_rate <= 1.0):
-            raise ValueError(
-                f"mutation_rate must be in [0.0, 1.0], got {mutation_rate}."
-            )
-        self.mutation_rate = mutation_rate
-
-    def mutate(
+    def __init__(
         self,
-        individual: Individual,
-        rng: np.random.Generator,
-    ) -> Individual:
+        mutation: CreepMutation,
+        n_generations: int,
+        vertex_delta_max: float = 30.0,
+        vertex_delta_min: float = 1.0,
+        color_delta_max: float  = 30.0,
+        color_delta_min: float  = 1.0,
+        extra_callback: Optional[callable] = None,
+    ) -> None:
+        self._mutation       = mutation
+        self._n_generations  = n_generations
+        self._v_max          = vertex_delta_max
+        self._v_min          = vertex_delta_min
+        self._c_max          = color_delta_max
+        self._c_min          = color_delta_min
+        self._extra_callback = extra_callback
+        self.delta_log: List[dict] = []
+
+    def __call__(
+        self,
+        generation: int,
+        best: "Individual",
+        stats: dict,
+    ) -> None:
         """
-        Replace selected triangles with random ones.
+        Update delta for the current generation and log the values.
+
+        Called automatically by the GA engine at the end of each generation.
 
         Parameters
         ----------
-        individual : Individual
-            Source individual (not modified).
-        rng : np.random.Generator
-            Used for Bernoulli trials and generating random triangles.
-
-        Returns
-        -------
-        Individual
-            New individual with selected genes replaced by random triangles.
+        generation : int
+            Current generation index (0 = initial population).
+        best : Individual
+            Best individual in the current generation.
+        stats : dict
+            Generation statistics dict from the GA engine log.
         """
-        triangles = list(individual.triangles)
-        reset_mask = rng.random(size=NUM_TRIANGLES) < self.mutation_rate
+        T = max(self._n_generations, 1)
+        t = min(generation, T)
 
-        for i, do_reset in enumerate(reset_mask):
-            if do_reset:
-                triangles[i] = Triangle.random(IMG_WIDTH, IMG_HEIGHT, rng)
+        decay   = t / T
+        v_delta = self._v_max * (self._v_min / self._v_max) ** decay
+        c_delta = self._c_max * (self._c_min / self._c_max) ** decay
 
-        return individual.copy_with(triangles)
+        self._mutation.set_delta(v_delta, c_delta)
+
+        self.delta_log.append({
+            "generation":   generation,
+            "vertex_delta": round(v_delta, 4),
+            "color_delta":  round(c_delta, 4),
+        })
+
+        if self._extra_callback is not None:
+            self._extra_callback(generation, best, stats)
 
     def __repr__(self) -> str:
-        return f"ResetMutation(rate={self.mutation_rate})"
+        return (
+            f"DeltaDecayScheduler("
+            f"v_delta={self._v_max}->{self._v_min}, "
+            f"c_delta={self._c_max}->{self._c_min}, "
+            f"n_generations={self._n_generations})"
+        )
 
 
 # ---------------------------------------------------------------------------
-# Concrete implementation 3: Swap mutation
+# Sigma decay scheduler for CompositeMutation
 # ---------------------------------------------------------------------------
 
-class SwapMutation(MutationOperator):
+class CompositeSigmaDecayScheduler:
     """
-    Draw-order swap mutation.
-
-    Randomly selects n_swaps pairs of triangles and swaps their positions
-    in the draw order. Geometry and color are unchanged — only the layering
-    order is modified.
+    Exponential decay schedule for a GaussianMutation embedded inside
+    a CompositeMutation.
 
     Motivation
     ----------
-    Draw order determines which triangles occlude which. A triangle that is
-    currently being covered by others may produce much better results if
-    moved to the top of the stack (or vice versa). This operator explores
-    the ordering space without discarding any triangle's shape or color,
-    making it non-destructive in terms of the genetic material it carries.
+    CompositeMutation chains multiple operators (e.g. Gaussian + Reset +
+    Swap). When decay is applied to the standalone GaussianMutation via
+    SigmaDecayScheduler, the inner Gaussian of a Composite is not updated.
+    This scheduler targets the inner GaussianMutation by reference,
+    enabling sigma decay within a composite pipeline without requiring
+    the GA engine to manage multiple scheduler calls.
 
     Parameters
     ----------
-    mutation_rate : float
-        Probability of applying any swap at all to an individual.
-        Default is 0.3 (swaps are applied to 30% of individuals).
-    n_swaps : int
-        Number of pair-swaps to perform when the operator fires.
-        Default is 2.
+    gaussian_op : GaussianMutation
+        The GaussianMutation instance inside the CompositeMutation whose
+        sigma values will be updated each generation.
+    n_generations : int
+        Total number of generations (matches GAConfig.n_generations).
+    vertex_sigma_max : float
+        Starting sigma for vertex coordinates. Default 40.0.
+    vertex_sigma_min : float
+        Final sigma for vertex coordinates. Default 2.0.
+    color_sigma_max : float
+        Starting sigma for color channels. Default 40.0.
+    color_sigma_min : float
+        Final sigma for color channels. Default 2.0.
+    extra_callback : callable, optional
+        Additional callback chained after sigma update.
     """
 
-    def __init__(self, mutation_rate: float = 0.3, n_swaps: int = 2) -> None:
-        if not (0.0 <= mutation_rate <= 1.0):
-            raise ValueError(
-                f"mutation_rate must be in [0.0, 1.0], got {mutation_rate}."
-            )
-        if n_swaps < 1:
-            raise ValueError(f"n_swaps must be >= 1, got {n_swaps}.")
-        self.mutation_rate = mutation_rate
-        self.n_swaps = n_swaps
-
-    def mutate(
+    def __init__(
         self,
-        individual: Individual,
-        rng: np.random.Generator,
-    ) -> Individual:
-        """
-        Apply n_swaps random draw-order swaps if the Bernoulli trial succeeds.
+        gaussian_op: GaussianMutation,
+        n_generations: int,
+        vertex_sigma_max: float = 40.0,
+        vertex_sigma_min: float = 2.0,
+        color_sigma_max: float  = 40.0,
+        color_sigma_min: float  = 2.0,
+        extra_callback: Optional[callable] = None,
+    ) -> None:
+        self._gaussian_op    = gaussian_op
+        self._n_generations  = n_generations
+        self._v_max          = vertex_sigma_max
+        self._v_min          = vertex_sigma_min
+        self._c_max          = color_sigma_max
+        self._c_min          = color_sigma_min
+        self._extra_callback = extra_callback
+        self.sigma_log: List[dict] = []
 
-        Parameters
-        ----------
-        individual : Individual
-            Source individual (not modified).
-        rng : np.random.Generator
-            Used for the overall trigger trial and swap index sampling.
+    def __call__(
+        self,
+        generation: int,
+        best: "Individual",
+        stats: dict,
+    ) -> None:
+        """Update sigma of the inner GaussianMutation each generation."""
+        T = max(self._n_generations, 1)
+        t = min(generation, T)
 
-        Returns
-        -------
-        Individual
-            New individual with swapped draw order, or a copy of the
-            original if the trigger trial did not fire.
-        """
-        # Per-individual trigger — swap mutation fires at the individual level
-        if rng.random() >= self.mutation_rate:
-            return individual.copy_with()
+        decay   = t / T
+        v_sigma = self._v_max * (self._v_min / self._v_max) ** decay
+        c_sigma = self._c_max * (self._c_min / self._c_max) ** decay
 
-        triangles = list(individual.triangles)
-        n = len(triangles)
+        self._gaussian_op.set_sigma(v_sigma, c_sigma)
 
-        for _ in range(self.n_swaps):
-            i, j = rng.integers(0, n, size=2)
-            if i != j:
-                triangles[i], triangles[j] = triangles[j], triangles[i]
+        self.sigma_log.append({
+            "generation":   generation,
+            "vertex_sigma": round(v_sigma, 4),
+            "color_sigma":  round(c_sigma, 4),
+        })
 
-        return individual.copy_with(triangles)
+        if self._extra_callback is not None:
+            self._extra_callback(generation, best, stats)
 
     def __repr__(self) -> str:
-        return f"SwapMutation(rate={self.mutation_rate}, n_swaps={self.n_swaps})"
+        return (
+            f"CompositeSigmaDecayScheduler("
+            f"v_sigma={self._v_max}->{self._v_min}, "
+            f"c_sigma={self._c_max}->{self._c_min})"
+        )
 
 
 # ---------------------------------------------------------------------------
-# Concrete implementation 4: Composite mutation
+# Asymmetric sigma decay scheduler
 # ---------------------------------------------------------------------------
 
-class CompositeMutation(MutationOperator):
+class AsymmetricSigmaDecayScheduler:
     """
-    Composite mutation that applies multiple operators in sequence.
+    Exponential decay schedule for GaussianMutation with independent decay
+    rates for vertex and color sigma.
 
-    Each registered operator is applied independently to the individual,
-    in registration order. The output of operator i is fed as input to
-    operator i+1, so effects accumulate.
-
-    This is the recommended operator for the main GA run because it
-    combines fine-grained local search (GaussianMutation) with occasional
-    coarse perturbation (ResetMutation) and order exploration (SwapMutation)
-    in a single unified operator — without requiring the GA engine to manage
-    multiple operator calls.
-
-    Example
-    -------
-    >>> composite = CompositeMutation([
-    ...     CreepMutation(mutation_rate=0.05, vertex_delta=15.0),
-    ...     ResetMutation(mutation_rate=0.01),
-    ...     SwapMutation(mutation_rate=0.2, n_swaps=1),
-    ... ])
-
-    To benchmark Gaussian vs creep, swap CreepMutation for GaussianMutation
-    keeping all other parameters fixed — the only difference is the noise
-    distribution shape.
+    Motivation
+    ----------
+    Vertex geometry and colour operate at different scales and may converge
+    at different rates during evolution. Decaying colour sigma faster
+    (stabilising the palette early) while keeping vertex sigma larger for
+    longer allows continued geometric exploration after colours are mostly
+    settled. The decay_end parameters control what fraction of total
+    generations each sigma takes to reach its minimum — colour defaults to
+    0.5 (stabilises halfway through the run) and vertices default to 1.0
+    (decay over the full run).
 
     Parameters
     ----------
-    operators : sequence of MutationOperator
-        Operators applied in order. Must contain at least one operator.
+    mutation : GaussianMutation
+        The mutation operator whose sigma values will be updated.
+    n_generations : int
+        Total number of generations.
+    vertex_sigma_max : float
+        Starting sigma for vertex coordinates. Default 40.0.
+    vertex_sigma_min : float
+        Final sigma for vertex coordinates. Default 2.0.
+    color_sigma_max : float
+        Starting sigma for color channels. Default 40.0.
+    color_sigma_min : float
+        Final sigma for color channels. Default 1.0.
+    vertex_decay_end : float
+        Fraction of total generations at which vertex sigma reaches its
+        minimum. 1.0 = decays over the full run. Default 1.0.
+    color_decay_end : float
+        Fraction of total generations at which color sigma reaches its
+        minimum. 0.5 = color stabilises halfway through. Default 0.5.
+    extra_callback : callable, optional
+        Additional callback chained after sigma update.
     """
 
-    def __init__(self, operators: Sequence[MutationOperator]) -> None:
-        if not operators:
-            raise ValueError("CompositeMutation requires at least one operator.")
-        self.operators: List[MutationOperator] = list(operators)
-
-    def mutate(
+    def __init__(
         self,
-        individual: Individual,
-        rng: np.random.Generator,
-    ) -> Individual:
-        """
-        Apply all registered operators in sequence.
+        mutation: GaussianMutation,
+        n_generations: int,
+        vertex_sigma_max: float = 40.0,
+        vertex_sigma_min: float = 2.0,
+        color_sigma_max: float  = 40.0,
+        color_sigma_min: float  = 1.0,
+        vertex_decay_end: float = 1.0,
+        color_decay_end: float  = 0.5,
+        extra_callback: Optional[callable] = None,
+    ) -> None:
+        self._mutation       = mutation
+        self._n_generations  = n_generations
+        self._v_max          = vertex_sigma_max
+        self._v_min          = vertex_sigma_min
+        self._c_max          = color_sigma_max
+        self._c_min          = color_sigma_min
+        self._v_end          = vertex_decay_end
+        self._c_end          = color_decay_end
+        self._extra_callback = extra_callback
+        self.sigma_log: List[dict] = []
 
-        Parameters
-        ----------
-        individual : Individual
-            Source individual. Each operator receives the output of the
-            previous one, so mutations accumulate across the chain.
-        rng : np.random.Generator
-            Shared random generator passed to all operators.
+    def __call__(
+        self,
+        generation: int,
+        best: "Individual",
+        stats: dict,
+    ) -> None:
+        """Update vertex and color sigma independently each generation."""
+        T = max(self._n_generations, 1)
+        t = min(generation, T)
 
-        Returns
-        -------
-        Individual
-            Individual after all operators have been applied.
-        """
-        result = individual
-        for operator in self.operators:
-            result = operator.mutate(result, rng)
-        return result
+        # Vertex sigma — decays over the full run by default
+        v_progress = min(t / (T * self._v_end), 1.0)
+        v_sigma = self._v_max * (self._v_min / self._v_max) ** v_progress
+
+        # Color sigma — reaches minimum earlier (default: halfway through)
+        c_progress = min(t / (T * self._c_end), 1.0)
+        c_sigma = self._c_max * (self._c_min / self._c_max) ** c_progress
+
+        self._mutation.set_sigma(v_sigma, c_sigma)
+
+        self.sigma_log.append({
+            "generation":   generation,
+            "vertex_sigma": round(v_sigma, 4),
+            "color_sigma":  round(c_sigma, 4),
+        })
+
+        if self._extra_callback is not None:
+            self._extra_callback(generation, best, stats)
 
     def __repr__(self) -> str:
-        ops_repr = ", ".join(repr(op) for op in self.operators)
-        return f"CompositeMutation([{ops_repr}])"
+        return (
+            f"AsymmetricSigmaDecayScheduler("
+            f"v_sigma={self._v_max}->{self._v_min} over {self._v_end*100:.0f}%, "
+            f"c_sigma={self._c_max}->{self._c_min} over {self._c_end*100:.0f}%)"
+        )

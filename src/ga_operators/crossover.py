@@ -458,7 +458,7 @@ class BlendCrossover(CrossoverOperator):
         parent_b: Individual,
         rng: np.random.Generator,
     ) -> Tuple[Individual, Individual]:
-        from utils import IMG_WIDTH, IMG_HEIGHT
+        from ga_utils import IMG_WIDTH, IMG_HEIGHT
 
         tris_a = list(parent_a.triangles)
         tris_b = list(parent_b.triangles)
