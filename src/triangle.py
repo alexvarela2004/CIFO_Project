@@ -198,7 +198,7 @@ class Triangle:
         return cls(vertices=vertices, color=rgba)
 
     @classmethod
-    def from_image(
+    def from_image( 
         cls,
         img_width: int,
         img_height: int,
@@ -207,8 +207,7 @@ class Triangle:
         alpha_range: Tuple[int, int] = (30, 180),
     ) -> "Triangle":
         """
-        Create a Triangle with random vertices and a color sampled from
-        the target image.
+        Create a Triangle with random vertices and a color sampled from the target image.
 
         Motivation
         ----------
@@ -514,6 +513,9 @@ class Triangle:
         rgba = tuple(rng.integers(0, 256, size=4).tolist())
         return cls(vertices=vertices, color=rgba)
 
+    # ------------------------------------------------------------------
+    # Triangle Mutation Helpers
+    # ------------------------------------------------------------------
     def mutate_vertices(
         self,
         img_width: int,
