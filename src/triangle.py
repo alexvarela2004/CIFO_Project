@@ -20,6 +20,7 @@ Design notes:
 from __future__ import annotations
 
 import numpy as np
+import numbers
 from dataclasses import dataclass, field
 from typing import Tuple
 
@@ -30,7 +31,7 @@ Vertex = Tuple[float, float]   # (x, y) in canvas pixel coordinates
 RGBAColor = Tuple[int, int, int, int]  # (R, G, B, A) each in [0, 255]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots= True)
 class Triangle:
     """
     Immutable representation of a single triangle gene.
@@ -66,19 +67,22 @@ class Triangle:
             raise ValueError(
                 f"A triangle must have exactly 3 vertices, got {len(self.vertices)}."
             )
+
         for i, (x, y) in enumerate(self.vertices):
-            if not (isinstance(x, (int, float)) and isinstance(y, (int, float))):
+            if not (isinstance(x, numbers.Real) and isinstance(y, numbers.Real)):
                 raise TypeError(
                     f"Vertex {i} coordinates must be numeric, got ({type(x)}, {type(y)})."
                 )
-
         r, g, b, a = self.color
         for channel_name, value in zip("RGBA", (r, g, b, a)):
+            if not isinstance(value, (int, np.integer)):
+                raise TypeError(
+                    f"Color channel {channel_name} must be an integer, got {type(value)}."
+                )
             if not (0 <= value <= 255):
                 raise ValueError(
                     f"Color channel {channel_name} must be in [0, 255], got {value}."
                 )
-
     # ------------------------------------------------------------------
     # Convenience properties
     # ------------------------------------------------------------------
@@ -367,7 +371,36 @@ class Triangle:
         rng: np.random.Generator,
         alpha_range: Tuple[int, int] = (30, 120),
     ) -> "Triangle":
-        """Random vertices and color, alpha restricted to semi-transparent range."""
+        """
+        Create a Triangle with random vertices and color, restricted to a
+        semi-transparent alpha range.
+
+        Motivation
+        ----------
+        Fully opaque triangles (alpha = 255) dominate lower layers and prevent
+        them from contributing to the rendered image. This factory enforces a
+        semi-transparent alpha range from the start, encouraging layering and
+        blending effects without requiring the GA to discover this constraint
+        through evolution.
+
+        Parameters
+        ----------
+        img_width : int
+            Canvas width in pixels.
+        img_height : int
+            Canvas height in pixels.
+        rng : np.random.Generator
+            Caller-supplied random generator for reproducibility.
+        alpha_range : tuple of (int, int)
+            (min_alpha, max_alpha) for the alpha channel.
+            Default (30, 120) keeps triangles clearly semi-transparent.
+
+        Returns
+        -------
+        Triangle
+            A new randomly initialised Triangle with constrained alpha.
+        """
+        
         xs = rng.uniform(0, img_width, size=3)
         ys = rng.uniform(0, img_height, size=3)
         vertices = tuple(zip(xs.tolist(), ys.tolist()))
@@ -383,7 +416,37 @@ class Triangle:
         rng: np.random.Generator,
         max_size_ratio: float = 0.15,
     ) -> "Triangle":
-        """Random color, vertices clustered around a random center (bounded size)."""
+        """
+        Create a Triangle with random color whose vertices are clustered
+        around a random center, bounding its maximum size.
+
+        Motivation
+        ----------
+        Unconstrained random triangles often cover large portions of the
+        canvas, which is useful early in evolution for coarse approximation
+        but limits fine-grained detail later. This factory biases initialisation
+        toward smaller triangles (at most 15% of canvas width/height by default),
+        which may be preferable when targeting regions of high spatial detail.
+
+        Parameters
+        ----------
+        img_width : int
+            Canvas width in pixels.
+        img_height : int
+            Canvas height in pixels.
+        rng : np.random.Generator
+            Caller-supplied random generator for reproducibility.
+        max_size_ratio : float
+            Maximum triangle extent as a fraction of canvas dimensions.
+            Default 0.15 limits each triangle to 15% of the canvas width
+            and height. Must be in (0, 1].
+
+        Returns
+        -------
+        Triangle
+            A new randomly initialised small Triangle.
+        """
+        
         max_w = img_width * max_size_ratio
         max_h = img_height * max_size_ratio
         cx = rng.uniform(0, img_width)
@@ -406,7 +469,40 @@ class Triangle:
         rng: np.random.Generator,
         vertex_noise_sigma: float = 0.0,
     ) -> "Triangle":
-        """Grid-anchored vertices (same as from_grid) but fully random color."""
+        """
+        Create a Triangle anchored to a grid cell with fully random color.
+
+        Motivation
+        ----------
+        Combines the spatial coverage guarantee of grid-based initialisation
+        (see from_grid) with fully random color, rather than sampling from the
+        target image. This is useful when testing whether image-seeded color
+        initialisation provides a measurable advantage over random color —
+        e.g. as a baseline in an ablation study on initialisation strategies.
+
+        Parameters
+        ----------
+        cell_x0, cell_y0 : float
+            Top-left corner of the grid cell (pixel coordinates).
+        cell_x1, cell_y1 : float
+            Bottom-right corner of the grid cell (pixel coordinates).
+        img_width : int
+            Canvas width in pixels, used for clipping vertices.
+        img_height : int
+            Canvas height in pixels, used for clipping vertices.
+        rng : np.random.Generator
+            Caller-supplied random generator for reproducibility.
+        vertex_noise_sigma : float
+            Std-dev of Gaussian noise applied to each vertex coordinate
+            after grid placement. 0.0 means exact grid corners.
+            Default 0.0 — pass a meaningful value (e.g. cell_width * 0.3)
+            to ensure population diversity.
+
+        Returns
+        -------
+        Triangle
+            A new grid-anchored Triangle with random color.
+        """
         base_xs = np.array([cell_x0, cell_x1, cell_x0], dtype=np.float32)
         base_ys = np.array([cell_y0, cell_y0, cell_y1], dtype=np.float32)
         if vertex_noise_sigma > 0.0:
