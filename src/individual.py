@@ -30,14 +30,13 @@ Design notes:
 
 from __future__ import annotations
 
-import copy
 from typing import List, Optional, Sequence, Tuple
 
 import numpy as np
 
 from triangle import Triangle
 from fitness import FitnessFunction
-from utils import render, IMG_WIDTH, IMG_HEIGHT
+from ga_utils import render, IMG_WIDTH, IMG_HEIGHT
 
 # Number of triangles per individual — fixed by the project specification.
 NUM_TRIANGLES: int = 100
@@ -122,7 +121,7 @@ class Individual:
         -------
         float
             Non-negative scalar fitness value as defined by the fitness
-            function (RMSE, CIEDE2000, or 1-SSIM).
+            function (RMSE, CIEDE2000 or 1-SSIM).
         """
         if self._fitness is None:
             self._evaluate()
@@ -133,8 +132,8 @@ class Individual:
         """
         The rendered pixel array for this individual (H×W×3 uint8).
 
-        Only available if cache_render=True was passed at construction,
-        or after fitness has been evaluated with cache_render=True.
+        Available only when cache_render=True. 
+        If evaluation has not yet occurred, it is computed lazily.
 
         Returns
         -------
@@ -199,7 +198,7 @@ class Individual:
         return self._fitness
 
     # ------------------------------------------------------------------
-    # Factory methods
+    # Initialization methods
     # ------------------------------------------------------------------
 
     @classmethod
@@ -236,138 +235,6 @@ class Individual:
         ]
         return cls(triangles, fitness_fn, cache_render=cache_render)
 
-    @classmethod
-    def from_image(
-        cls,
-        fitness_fn: FitnessFunction,
-        rng: np.random.Generator,
-        target: np.ndarray,
-        cache_render: bool = False,
-    ) -> "Individual":
-        """
-        Create an Individual with NUM_TRIANGLES image-seeded triangles.
-
-        Vertices are random but each triangle's color is sampled from the
-        target image at the triangle's centroid. This biases the initial
-        population toward the correct color palette from generation 0,
-        reducing the number of generations the GA needs to spend on basic
-        color discovery before it can start refining shapes.
-
-        Parameters
-        ----------
-        fitness_fn : FitnessFunction
-            Fitness function to attach to this individual.
-        rng : np.random.Generator
-            Caller-supplied random generator for reproducibility.
-        target : np.ndarray
-            H×W×3 uint8 RGB array of the target image. Passed through to
-            Triangle.from_image() for centroid color sampling.
-        cache_render : bool
-            Whether to cache the rendered array after evaluation.
-
-        Returns
-        -------
-        Individual
-            A new image-seeded Individual.
-        """
-        triangles = [
-            Triangle.from_image(IMG_WIDTH, IMG_HEIGHT, rng, target)
-            for _ in range(NUM_TRIANGLES)
-        ]
-        return cls(triangles, fitness_fn, cache_render=cache_render)
-
-    @classmethod
-    def from_grid(
-        cls,
-        fitness_fn: FitnessFunction,
-        rng: np.random.Generator,
-        target: np.ndarray,
-        n_cols: int = 10,
-        n_rows: int = 10,
-        vertex_noise_sigma: Optional[float] = None,
-        cache_render: bool = False,
-    ) -> "Individual":
-        """
-        Create an Individual with triangles anchored to a canvas grid.
-
-        The canvas is divided into n_cols x n_rows cells. Each cell is
-        split into two triangles (upper-left and lower-right), yielding
-        n_cols * n_rows * 2 triangles total. If this exceeds NUM_TRIANGLES,
-        triangles are sampled without replacement. If it falls short,
-        the remaining slots are filled with random triangles.
-
-        Triangle colors are sampled from the target image at each
-        triangle's centroid, combining spatial coverage with local color.
-
-        Vertex noise is applied per-individual to ensure population
-        diversity — without it, all individuals in the population would
-        start with identical chromosome structure.
-
-        Parameters
-        ----------
-        fitness_fn : FitnessFunction
-            Fitness function to attach to this individual.
-        rng : np.random.Generator
-            Caller-supplied random generator for reproducibility.
-        target : np.ndarray
-            H×W×3 uint8 RGB array of the target image.
-        n_cols : int
-            Number of grid columns. Default 10.
-        n_rows : int
-            Number of grid rows. Default 10 -> 10*10*2 = 200 candidate
-            triangles, from which NUM_TRIANGLES=100 are sampled.
-        vertex_noise_sigma : float or None
-            Std-dev of Gaussian noise applied to vertex coordinates.
-            If None, defaults to 0.3 * min(cell_width, cell_height),
-            which gives reasonable diversity while preserving locality.
-        cache_render : bool
-            Whether to cache the rendered array after evaluation.
-
-        Returns
-        -------
-        Individual
-            A new grid-anchored Individual.
-        """
-        cell_w = IMG_WIDTH  / n_cols
-        cell_h = IMG_HEIGHT / n_rows
-
-        if vertex_noise_sigma is None:
-            vertex_noise_sigma = 0.3 * min(cell_w, cell_h)
-
-        # Build all candidate triangles (2 per cell)
-        candidates: List[Triangle] = []
-        for row in range(n_rows):
-            for col in range(n_cols):
-                x0 = col * cell_w
-                y0 = row * cell_h
-                x1 = x0 + cell_w
-                y1 = y0 + cell_h
-
-                # Upper-left triangle: (x0,y0), (x1,y0), (x0,y1)
-                candidates.append(Triangle.from_grid(
-                    x0, y0, x1, y1, rng, target,
-                    vertex_noise_sigma=vertex_noise_sigma,
-                ))
-                # Lower-right triangle: (x1,y0), (x1,y1), (x0,y1)
-                candidates.append(Triangle.from_grid(
-                    x1, y0, x1, y1, rng, target,
-                    vertex_noise_sigma=vertex_noise_sigma,
-                ))
-
-        # Sample exactly NUM_TRIANGLES from the candidate pool
-        if len(candidates) >= NUM_TRIANGLES:
-            indices = rng.choice(len(candidates), size=NUM_TRIANGLES, replace=False)
-            triangles = [candidates[i] for i in indices]
-        else:
-            # Pad with random triangles if grid produces too few
-            triangles = candidates + [
-                Triangle.random(IMG_WIDTH, IMG_HEIGHT, rng)
-                for _ in range(NUM_TRIANGLES - len(candidates))
-            ]
-
-        # Shuffle draw order so no systematic bias in layering
-        rng.shuffle(triangles)
-        return cls(triangles, fitness_fn, cache_render=cache_render)
 
     @classmethod
     def random_semitransparent(
@@ -377,7 +244,31 @@ class Individual:
         alpha_range: Tuple[int, int] = (30, 120),
         cache_render: bool = False,
     ) -> "Individual":
-        """Random vertices and colors with alpha restricted to a semi-transparent range."""
+        """
+        Create an Individual with randomly initialised semi-transparent triangles.
+
+        Delegates to Triangle.random_semitransparent() for each gene, restricting
+        the alpha channel to a bounded range. Fully opaque triangles tend to
+        dominate lower layers and prevent them from contributing to the rendered
+        image; constraining alpha from the start encourages layering and blending
+        without requiring the GA to discover this through evolution.
+
+        Parameters
+        ----------
+        fitness_fn : FitnessFunction
+            Fitness function to attach to this individual.
+        rng : np.random.Generator
+            Caller-supplied random generator for reproducibility.
+        alpha_range : tuple of (int, int)
+            (min_alpha, max_alpha) for all triangles. Default (30, 120).
+        cache_render : bool
+            Whether to cache the rendered array after evaluation.
+
+        Returns
+        -------
+        Individual
+            A new Individual with alpha-constrained triangles.
+        """
         triangles = [
             Triangle.random_semitransparent(IMG_WIDTH, IMG_HEIGHT, rng, alpha_range=alpha_range)
             for _ in range(NUM_TRIANGLES)
@@ -392,7 +283,34 @@ class Individual:
         max_size_ratio: float = 0.15,
         cache_render: bool = False,
     ) -> "Individual":
-        """Random colors, vertices constrained to small triangles (bounded size)."""
+        """
+        Create an Individual whose triangles are spatially small.
+
+        Delegates to Triangle.random_small() for each gene, constraining
+        vertex spread to a fraction of the canvas dimensions. Unconstrained
+        random triangles often cover large canvas regions, which is useful
+        for coarse approximation early in evolution but may limit fine-grained
+        detail later. This strategy biases the initial population toward
+        smaller primitives, potentially accelerating convergence in
+        high-detail regions.
+
+        Parameters
+        ----------
+        fitness_fn : FitnessFunction
+            Fitness function to attach to this individual.
+        rng : np.random.Generator
+            Caller-supplied random generator for reproducibility.
+        max_size_ratio : float
+            Maximum triangle extent as a fraction of canvas dimensions.
+            Default 0.15. Must be in (0, 1].
+        cache_render : bool
+            Whether to cache the rendered array after evaluation.
+
+        Returns
+        -------
+        Individual
+            A new Individual with size-constrained triangles.
+        """
         triangles = [
             Triangle.random_small(IMG_WIDTH, IMG_HEIGHT, rng, max_size_ratio=max_size_ratio)
             for _ in range(NUM_TRIANGLES)
@@ -409,7 +327,39 @@ class Individual:
         vertex_noise_sigma: Optional[float] = None,
         cache_render: bool = False,
     ) -> "Individual":
-        """Grid-anchored coverage (same as from_grid) but fully random colors."""
+        """
+        Create an Individual with grid-anchored triangles and random colours.
+
+        Follows the same spatial partitioning logic as from_grid() — dividing
+        the canvas into n_cols × n_rows cells and placing two candidate
+        triangles per cell — but assigns fully random RGBA colours rather
+        than sampling from the target image. This is designed as a controlled
+        variant of from_grid() for ablation: isolating the contribution of
+        image-seeded colour initialisation from the contribution of guaranteed
+        spatial coverage.
+
+        Parameters
+        ----------
+        fitness_fn : FitnessFunction
+            Fitness function to attach to this individual.
+        rng : np.random.Generator
+            Caller-supplied random generator for reproducibility.
+        n_cols : int
+            Number of grid columns. Default 10.
+        n_rows : int
+            Number of grid rows. Default 10.
+        vertex_noise_sigma : float or None
+            Std-dev of Gaussian noise applied to vertex coordinates.
+            If None, defaults to 0.3 × min(cell_width, cell_height).
+        cache_render : bool
+            Whether to cache the rendered array after evaluation.
+
+        Returns
+        -------
+        Individual
+            A new grid-anchored Individual with random colours.
+        """
+
         cell_w = IMG_WIDTH / n_cols
         cell_h = IMG_HEIGHT / n_rows
         if vertex_noise_sigma is None:
@@ -447,7 +397,32 @@ class Individual:
         rng: np.random.Generator,
         cache_render: bool = False,
     ) -> "Individual":
-        """Random triangles sorted by alpha descending: most opaque at bottom layer."""
+        """
+        Create an Individual with triangles sorted by alpha in descending order.
+
+        Triangles are initialised randomly (equivalent to random()) and then
+        sorted so that the most opaque triangles occupy the lowest draw-order
+        indices (bottom layers) and the most transparent occupy the highest
+        (top layers). This exploits the semantics of the draw order: opaque
+        triangles at the bottom establish broad colour regions, while
+        transparent triangles at the top refine and blend without fully
+        occluding the layers beneath.
+
+        Parameters
+        ----------
+        fitness_fn : FitnessFunction
+            Fitness function to attach to this individual.
+        rng : np.random.Generator
+            Caller-supplied random generator for reproducibility.
+        cache_render : bool
+            Whether to cache the rendered array after evaluation.
+
+        Returns
+        -------
+        Individual
+            A new randomly initialised Individual with alpha-sorted draw order.
+        """
+       
         triangles = [Triangle.random(IMG_WIDTH, IMG_HEIGHT, rng) for _ in range(NUM_TRIANGLES)]
         triangles.sort(key=lambda t: t.alpha, reverse=True)
         return cls(triangles, fitness_fn, cache_render=cache_render)
@@ -461,7 +436,38 @@ class Individual:
         n_rows: int = 5,
         cache_render: bool = False,
     ) -> "Individual":
-        """Random colors, vertices constrained per quadrant for guaranteed coverage."""
+        """
+        Create an Individual with triangles spatially distributed across quadrants.
+
+        The canvas is divided into n_cols × n_rows cells and NUM_TRIANGLES
+        triangles are distributed proportionally across cells, with each
+        triangle's vertices constrained to lie within its assigned cell.
+        This guarantees uniform spatial coverage without requiring image
+        information, unlike from_grid(). Colours are fully random.
+
+        The distribution ensures every canvas region receives at least
+        floor(NUM_TRIANGLES / (n_cols × n_rows)) triangles, with remainder
+        triangles allocated to the first cells in row-major order.
+
+        Parameters
+        ----------
+        fitness_fn : FitnessFunction
+            Fitness function to attach to this individual.
+        rng : np.random.Generator
+            Caller-supplied random generator for reproducibility.
+        n_cols : int
+            Number of grid columns. Default 5.
+        n_rows : int
+            Number of grid rows. Default 5 → 25 cells,
+            each receiving 4 triangles (100 / 25 = 4).
+        cache_render : bool
+            Whether to cache the rendered array after evaluation.
+
+        Returns
+        -------
+        Individual
+            A new Individual with quadrant-constrained triangle placement.
+        """
         n_cells = n_cols * n_rows
         per_cell = NUM_TRIANGLES // n_cells
         remainder = NUM_TRIANGLES % n_cells
@@ -483,6 +489,10 @@ class Individual:
                     triangles.append(Triangle(vertices=vertices, color=rgba))
         rng.shuffle(triangles)
         return cls(triangles, fitness_fn, cache_render=cache_render)
+
+    # -------------------------------------------------------------------
+    # Supporting Utilities
+    # -------------------------------------------------------------------
 
     def copy_with(
         self,
