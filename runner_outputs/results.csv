@@ -1,0 +1,34 @@
+run_name,seed,phase,description,selection,crossover,mutation,n_elites,population_size,n_generations_max,n_generations_run,final_best_fitness,elapsed_s,stopped_early
+p5_mut_gaussian_fixed,42,5,Mutation sweep - gaussian_fixed,tournament_k10,two_point,gaussian_fixed,5,50,3000,3000,26.499329,1171.5,False
+p5_mut_gaussian_fixed,43,5,Mutation sweep - gaussian_fixed,tournament_k10,two_point,gaussian_fixed,5,50,3000,3000,28.52132,1378.0,False
+p5_mut_gaussian_fixed,44,5,Mutation sweep - gaussian_fixed,tournament_k10,two_point,gaussian_fixed,5,50,3000,3000,28.69141,1777.2,False
+p5_mut_gaussian_decay,42,5,Mutation sweep - gaussian_decay,tournament_k10,two_point,gaussian_decay,5,50,3000,3000,24.081757,1384.6,False
+p5_mut_gaussian_decay,43,5,Mutation sweep - gaussian_decay,tournament_k10,two_point,gaussian_decay,5,50,3000,3000,25.737967,1277.1,False
+p5_mut_gaussian_decay,44,5,Mutation sweep - gaussian_decay,tournament_k10,two_point,gaussian_decay,5,50,3000,3000,25.317753,1321.1,False
+p5_mut_composite_gaussian,42,5,Mutation sweep - composite_gaussian,tournament_k10,two_point,composite_gaussian,5,50,3000,3000,27.43327,1294.7,False
+p5_mut_composite_gaussian,43,5,Mutation sweep - composite_gaussian,tournament_k10,two_point,composite_gaussian,5,50,3000,3000,28.495502,1307.3,False
+p5_mut_composite_gaussian,44,5,Mutation sweep - composite_gaussian,tournament_k10,two_point,composite_gaussian,5,50,3000,3000,28.642162,1276.0,False
+p5_mut_creep_fixed,42,5,Mutation sweep - creep_fixed,tournament_k10,two_point,creep_fixed,5,50,3000,3000,28.385916,1127.9,False
+p5_mut_creep_fixed,43,5,Mutation sweep - creep_fixed,tournament_k10,two_point,creep_fixed,5,50,3000,3000,27.406773,1230.7,False
+p5_mut_creep_fixed,44,5,Mutation sweep - creep_fixed,tournament_k10,two_point,creep_fixed,5,50,3000,3000,28.766312,1187.6,False
+p5_mut_creep_decay,42,5,Mutation sweep - creep_decay,tournament_k10,two_point,creep_decay,5,50,3000,3000,26.655806,1037.8,False
+p5_mut_creep_decay,43,5,Mutation sweep - creep_decay,tournament_k10,two_point,creep_decay,5,50,3000,3000,24.932547,1054.8,False
+p5_mut_creep_decay,44,5,Mutation sweep - creep_decay,tournament_k10,two_point,creep_decay,5,50,3000,3000,26.946692,1186.4,False
+p5_mut_composite_creep,42,5,Mutation sweep - composite_creep,tournament_k10,two_point,composite_creep,5,50,3000,3000,27.561501,1048.0,False
+p5_mut_composite_creep,43,5,Mutation sweep - composite_creep,tournament_k10,two_point,composite_creep,5,50,3000,3000,27.134125,1174.5,False
+p5_mut_composite_creep,44,5,Mutation sweep - composite_creep,tournament_k10,two_point,composite_creep,5,50,3000,3000,28.236324,1270.6,False
+p7_mut_composite_gaussian_decay,42,7,Advanced mutation - composite_gaussian_decay,tournament_k10,two_point,composite_gaussian_decay,5,50,3000,3000,25.835899,1108.4,False
+p7_mut_composite_gaussian_decay,43,7,Advanced mutation - composite_gaussian_decay,tournament_k10,two_point,composite_gaussian_decay,5,50,3000,3000,25.630869,1194.6,False
+p7_mut_composite_gaussian_decay,44,7,Advanced mutation - composite_gaussian_decay,tournament_k10,two_point,composite_gaussian_decay,5,50,3000,3000,25.912867,1129.3,False
+p7_mut_gaussian_decay_asymmetric,42,7,Advanced mutation - gaussian_decay_asymmetric,tournament_k10,two_point,gaussian_decay_asymmetric,5,50,3000,3000,27.932451,1146.5,False
+p7_mut_gaussian_decay_asymmetric,43,7,Advanced mutation - gaussian_decay_asymmetric,tournament_k10,two_point,gaussian_decay_asymmetric,5,50,3000,3000,27.592175,1082.3,False
+p7_mut_gaussian_decay_asymmetric,44,7,Advanced mutation - gaussian_decay_asymmetric,tournament_k10,two_point,gaussian_decay_asymmetric,5,50,3000,3000,27.744873,1091.4,False
+p7_mut_gaussian_decay_asymmetric_v2,42,7,Advanced mutation - gaussian_decay_asymmetric_v2 (geometry first),tournament_k10,two_point,gaussian_decay_asymmetric_v2,5,50,3000,3000,23.871473,1500.4,False
+p7_mut_gaussian_decay_asymmetric_v2,43,7,Advanced mutation - gaussian_decay_asymmetric_v2 (geometry first),tournament_k10,two_point,gaussian_decay_asymmetric_v2,5,50,3000,3000,25.647156,6337.3,False
+p7_mut_gaussian_decay_asymmetric_v2,44,7,Advanced mutation - gaussian_decay_asymmetric_v2 (geometry first),tournament_k10,two_point,gaussian_decay_asymmetric_v2,5,50,3000,3000,23.464739,56785.8,False
+p11_pop_100,42,11,OFAT - population_size=100,tournament_k10,blend,gaussian_decay,3,100,3000,3000,22.761368,2914.7,False
+p11_pop_100,43,11,OFAT - population_size=100,tournament_k10,blend,gaussian_decay,3,100,3000,3000,22.052738,3598.9,False
+p11_pop_100,44,11,OFAT - population_size=100,tournament_k10,blend,gaussian_decay,3,100,3000,3000,22.030489,3936.3,False
+p11_pop_150,42,11,OFAT - population_size=150,tournament_k10,blend,gaussian_decay,3,150,3000,3000,21.635759,4529.4,False
+p11_pop_150,43,11,OFAT - population_size=150,tournament_k10,blend,gaussian_decay,3,150,3000,3000,21.854746,4254.9,False
+p11_pop_150,44,11,OFAT - population_size=150,tournament_k10,blend,gaussian_decay,3,150,3000,3000,21.697384,4427.2,False
