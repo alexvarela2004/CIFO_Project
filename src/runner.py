@@ -73,7 +73,7 @@ from ga_operators.mutation import (
     SigmaDecayScheduler,
     DeltaDecayScheduler,
 )
-from utils import load_target, save_render, render, triangles_to_json
+from ga_utils import load_target, save_render, render, triangles_to_json
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -667,33 +667,25 @@ def build_experiment_plan() -> List[RunConfig]:
 
 
     # ------------------------------------------------------------------
-    # Phase 11: restantes hiperparâmetros
+    # Phase 11: testing population size
     # ------------------------------------------------------------------
 
     BEST_P10 = dict(
-        selection="tournament_k10", #garantir que continua a ser apos fase 9
+        selection="tournament_k10",
         crossover="blend",
-        mutation="gaussian_decay", #garantir que continua a ser apos fase 9
-        n_elites=7, # melhor da fase 8
+        mutation="gaussian_decay", 
+        n_elites=3, 
         n_generations=3000,
+        init_strategy = "quadrant"
     )
 
     BEST_P10_EXTRA = {
-    "mutation_rate": 0.05,    # atualizar após Fase 10
-    "vertex_sigma_max": 40.0, # atualizar após Fase 10
-    "color_sigma_max": 40.0,  # atualizar após Fase 10 (igual a sigma_max)
+    "mutation_rate": 0.01, 
+    "vertex_sigma_max": 80.0, 
+    "color_sigma_max": 80.0, 
     }
 
-    for sigma_min in [0.5, 4.0]:
-        runs.append(RunConfig(
-            name=f"p11_sigmin_{str(sigma_min).replace('.', '')}",
-            phase=11,
-            description=f"OFAT - vertex_sigma_min={sigma_min}",
-            extra={**BEST_P10_EXTRA, "vertex_sigma_min": sigma_min, "color_sigma_min": sigma_min},
-            **BEST_P10,
-        ))
-
-    for pop in [80, 100, 130, 150]:
+    for pop in [100, 150]:
         runs.append(RunConfig(
             name=f"p11_pop_{pop}",
             phase=11,
@@ -702,21 +694,30 @@ def build_experiment_plan() -> List[RunConfig]:
             extra=BEST_P10_EXTRA,
             **BEST_P10,
         ))
-
-    for xrate in [0.6, 1.0]:
-        runs.append(RunConfig(
-            name=f"p11_xrate_{str(xrate).replace('.', '')}",
-            phase=11,
-            description=f"OFAT - crossover_rate={xrate}",
-            crossover_rate=xrate,
-            extra=BEST_P10_EXTRA,
-            **BEST_P10,
-        ))
-
     
 
-    return runs
+    # ------------------------------------------------------------------
+    # Phase 12: Final run - best config with 20000 generations
+    # ------------------------------------------------------------------
+    runs.append(RunConfig(
+        name="p12_final",
+        phase=12,
+        description="Final run - best config with 20000 generations",
+        selection="tournament_k10",
+        crossover="blend",
+        mutation="gaussian_decay",
+        n_elites=3,
+        population_size=150,
+        init_strategy="quadrant",
+        n_generations=20000,
+        extra={
+            "mutation_rate": 0.01,
+            "vertex_sigma_max": 80.0,
+            "color_sigma_max": 80.0,
+        },
+    ))
 
+    return runs
 
 # ---------------------------------------------------------------------------
 # Entry point
