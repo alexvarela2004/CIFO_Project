@@ -57,7 +57,7 @@ from population import Population
 from ga_operators.selection import SelectionOperator
 from ga_operators.crossover import CrossoverOperator
 from ga_operators.mutation import MutationOperator
-from utils import triangles_to_json, save_render, render
+from ga_utils import triangles_to_json, save_render, render
 
 # ---------------------------------------------------------------------------
 # Module-level logger — callers can configure the logging level externally
