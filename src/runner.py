@@ -54,7 +54,7 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 
 # -- project imports
-from fitness import RMSEFitness
+from fitness import RMSEFitness, CIEDEFitness, SSIMFitness
 from ga import GeneticAlgorithm, GAConfig, EarlyStopping, DiversityAwareEarlyStopping
 from ga_operators.selection import TournamentSelection, RankSelection
 from ga_operators.crossover import (
@@ -307,6 +307,22 @@ def make_mutation(name: str, n_generations: int, extra: dict = None):
 # ---------------------------------------------------------------------------
 # Core single-seed run
 # ---------------------------------------------------------------------------
+def make_fitness(extra: dict, target: np.ndarray):
+    """
+    Instantiate the fitness function from the extra dict.
+    Defaults to RMSEFitness if no 'fitness' key is present —
+    preserves behaviour for all phases 1-11.
+    """
+    name = extra.get("fitness", "rmse")
+
+    if name == "rmse":
+        return RMSEFitness(target)
+    if name == "ciede2000":
+        return CIEDEFitness(target)
+    if name == "ssim":
+        return SSIMFitness(target)
+    raise ValueError(f"Unknown fitness function: {name}")
+
 
 def execute_single_run(cfg: RunConfig, seed: int, target: np.ndarray) -> dict:
     """
@@ -325,7 +341,7 @@ def execute_single_run(cfg: RunConfig, seed: int, target: np.ndarray) -> dict:
         d["seed"] = seed
         json.dump(d, f, indent=2)
 
-    fitness_fn = RMSEFitness(target)
+    fitness_fn = make_fitness(cfg.extra, target)
     selection = make_selection(cfg.selection, **cfg.extra)
     crossover = make_crossover(cfg.crossover)
     mutation_op, scheduler = make_mutation(cfg.mutation, cfg.n_generations, extra=cfg.extra)
@@ -722,6 +738,34 @@ def build_experiment_plan() -> List[RunConfig]:
         },
     ))
 
+    # ------------------------------------------------------------------
+    # Phase 13: Challenge 1 — alternative fitness functions
+    # ------------------------------------------------------------------
+
+    BEST_P12 = dict(
+        selection="tournament_k10",
+        crossover="blend",
+        mutation="gaussian_decay",
+        n_elites=3,
+        population_size=150,
+        n_generations=3000,
+        init_strategy="quadrant",
+    )
+
+    BEST_P12_EXTRA = {
+        "mutation_rate":    0.01,
+        "vertex_sigma_max": 80.0,
+        "color_sigma_max":  80.0,
+    }
+
+    for fitness_name in ["ciede2000", "ssim"]:
+        runs.append(RunConfig(
+            name=f"p13_fitness_{fitness_name}",
+            phase=13,
+            description=f"Challenge 1 - {fitness_name} fitness function",
+            extra={**BEST_P12_EXTRA, "fitness": fitness_name},
+            **BEST_P12,
+        ))
     return runs
 
 # ---------------------------------------------------------------------------
