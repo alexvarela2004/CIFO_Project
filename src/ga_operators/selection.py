@@ -29,8 +29,7 @@ Design notes:
       state and is supplied by the caller. This makes operators safe to
       reuse across generations and trivially testable.
     - select() always returns exactly n_parents individuals, drawn with
-      replacement unless noted otherwise, so n_parents can exceed
-      population size.
+      replacement, so n_parents can exceed population size.
 """
 
 from __future__ import annotations
@@ -181,10 +180,15 @@ class RankSelection(SelectionOperator):
 
     Motivation
     ----------
-    When raw fitness values are very close (common in later generations
-    when the GA is fine-tuning), roulette selection becomes nearly uniform.
     Rank selection maintains a consistent selection pressure regardless of
-    the fitness distribution, preventing stagnation in late-stage runs.
+    the fitness distribution. This is particularly valuable in later generations
+    when raw fitness values cluster tightly — a scenario where roulette selection
+    degenerates to near-uniform sampling and loses all pressure, and where
+    tournament selection's behaviour depends heavily on the chosen k. By
+    decoupling selection probability from raw fitness magnitude and mapping it
+    to rank instead, this operator avoids both the superindividual dominance
+    problem of early roulette selection and the late-generation stagnation it
+    causes.
 
     Parameters
     ----------

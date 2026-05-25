@@ -758,6 +758,25 @@ def build_experiment_plan() -> List[RunConfig]:
         },
     ))
 
+    runs.append(RunConfig(
+        name="p14_final_300",
+        phase=14,
+        description="Final run - best config with 20000 generations, 300 population",
+        selection="tournament_k10",
+        crossover="blend",
+        mutation="gaussian_decay",
+        n_elites=3,
+        population_size=300,
+        init_strategy="quadrant",
+        n_generations=20000,
+        extra={
+            "mutation_rate": 0.01,
+            "vertex_sigma_max": 80.0,
+            "color_sigma_max": 80.0,
+            "decay_n_generations": 5000,
+        },
+    ))
+
     # ------------------------------------------------------------------
     # Phase 13: Challenge 1 — alternative fitness functions
     # ------------------------------------------------------------------

@@ -6,16 +6,61 @@ Defines the Individual class, which represents a single candidate solution
 
 An Individual is an ordered list of NUM_TRIANGLES Triangle objects. The
 draw order is significant: triangle at index 0 is rendered first (bottom
-layer) and triangle at index 99 is rendered last (top layer, occludes all
-others beneath it).
+layer) and triangle at index NUM_TRIANGLES-1 is rendered last (top layer,
+occludes all others beneath it).
 
-Design notes:
+Initialisation strategies
+-------------------------
+Seven factory methods are provided to seed the initial population with
+different structural biases:
+
+    - random()                  -- uniformly random vertices and color.
+    - random_semitransparent()  -- random with alpha restricted to a range,
+                                   encouraging layering and blending from
+                                   the start.
+    - random_small()            -- random with vertex spread constrained to
+                                   a fraction of the canvas, biasing toward
+                                   fine-grained primitives.
+    - from_grid_random_color()  -- grid-anchored placement with random color,
+                                   guaranteeing spatial coverage without
+                                   image-seeded color.
+    - random_sorted_alpha()     -- random triangles sorted descending by alpha
+                                   so opaque triangles anchor the bottom layers
+                                   and transparent ones refine the top.
+    - random_quadrant()         -- canvas divided into cells; triangles
+                                   distributed proportionally across cells
+                                   with vertices constrained to their cell.
+
+Chromosome access helpers
+-------------------------
+    - get_triangle(index)             -- return triangle at a given draw-order index.
+    - with_triangle(index, triangle)  -- return a new Individual with one gene replaced.
+    - with_triangles(replacements)    -- return a new Individual with multiple genes
+                                        replaced in a single operation.
+    - copy_with(triangles)            -- return a new Individual optionally replacing
+                                        the full chromosome; used by all genetic
+                                        operators to produce offspring.
+
+Serialisation
+-------------
+    - to_dict() / from_dict()  -- JSON-compatible roundtrip. Fitness is
+                                  included if already cached, avoiding
+                                  redundant re-evaluation on reload.
+
+Comparison
+----------
+    __lt__, __le__, __eq__ compare by fitness directly, enabling sorting
+    and min() calls on lists of individuals without a key function. The
+    GA engine relies on this for selection and elitism.
+
+Design notes
+------------
     - Fitness is lazily evaluated and cached. The first call to
       Individual.fitness triggers rendering + evaluation; subsequent calls
       return the cached scalar. This is critical for performance since the
       GA engine frequently accesses fitness for sorting and selection without
       needing to re-evaluate.
-    - The cache is invalidated only when a new Individual is created —
+    - The cache is invalidated only when a new Individual is created --
       since Triangle and Individual are both immutable, a cached fitness
       value is always valid for the lifetime of that Individual instance.
     - Individual is intentionally immutable: all genetic operators (crossover,

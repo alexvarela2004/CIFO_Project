@@ -7,6 +7,25 @@ Each Triangle encodes:
     - Three (x, y) vertices defining its shape and position on the canvas.
     - An RGBA color (R, G, B, A) where alpha controls transparency/blending.
 
+Factory methods:
+    - random()                  -- uniformly random vertices and color.
+    - random_semitransparent()  -- random with alpha restricted to a range.
+    - random_small()            -- random confined to a fraction of the canvas.
+    - from_grid_random_color()  -- anchored to a grid cell with random color.
+
+Mutation helpers:
+    - mutate_vertices()  -- Gaussian perturbation of vertex coordinates.
+    - mutate_color()     -- Gaussian perturbation of RGBA channels.
+    - mutate()           -- convenience method combining both.
+
+Geometry helpers:
+    - area()          -- signed area via shoelace formula.
+    - bounding_box()  -- axis-aligned bounding box.
+    - is_degenerate() -- check for negligible-area triangles.
+
+Serialisation:
+    - to_dict() / from_dict()  -- JSON-compatible roundtrip.
+
 Design notes:
     - Immutability is enforced via __slots__ and properties: once created,
       a Triangle's state cannot be mutated. Genetic operators always produce
@@ -16,6 +35,7 @@ Design notes:
       it is purely a data container with rendering capability.
     - Numpy is used for all numerical operations for performance.
 """
+
 
 from __future__ import annotations
 

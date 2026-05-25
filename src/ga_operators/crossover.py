@@ -8,18 +8,26 @@ one or two offspring. The intent is to preserve and recombine building
 blocks (groups of well-placed triangles) discovered by the GA, producing
 offspring that inherit beneficial traits from both parents.
 
-Three concrete strategies are provided:
+Five concrete strategies are provided:
 
-    1. SinglePointCrossover  — splits the chromosome at one random point
-                               and swaps the tails. Simple and effective.
-    2. UniformCrossover      — each gene independently inherited from either
-                               parent with probability 0.5. High mixing rate.
-    3. KPointCrossover       — generalisation of single-point with k cuts.
-                               Allows contiguous segments from each parent.
+    1. SinglePointCrossover   -- splits the chromosome at one random point
+                                 and swaps the tails. 
+    2. UniformCrossover       -- each gene independently inherited from either
+                                 parent with probability swap_prob. High mixing
+                                 rate; likely to destroy positional locality.
+    3. KPointCrossover        -- generalisation of single-point with k cuts.
+                                 Allows contiguous segments from each parent;
+                                 k=2 is two-point crossover.
+    4. SegmentShuffleCrossover -- random number of cuts (k_min to k_max) with
+                                  independent per-segment parent assignment,
+                                  unlike the forced alternation of KPointCrossover.
+    5. BlendCrossover         -- BLX-alpha (Eshelman & Schaffer, 1993); samples
+                                 offspring vertices and colors from an extended
+                                 interval around the two parents. Operates in
+                                 continuous space rather than swapping whole genes.
 
-All operators produce exactly two offspring per call (both orderings of
-the split), which keeps population size stable when paired with the GA
-engine's generational replacement.
+All operators produce exactly two offspring per call, which keeps population
+size stable when paired with the GA engine's generational replacement.
 
 Design notes:
     - CrossoverOperator is an abstract base class. The GA engine depends
@@ -27,11 +35,11 @@ Design notes:
     - Draw order of triangles is meaningful (bottom-to-top rendering), so
       crossover operators that preserve contiguous segments (single-point,
       k-point) are likely to produce more coherent offspring than uniform
-      crossover, which breaks all spatial locality. This is a justifiable
-      design choice for the report.
-    - All operators are stateless between calls — safe to reuse across
+      crossover, which breaks all spatial locality.
+    - All operators are stateless between calls -- safe to reuse across
       generations without resetting.
 """
+
 
 from __future__ import annotations
 
