@@ -672,10 +672,11 @@ def build_experiment_plan() -> List[RunConfig]:
             description=f"Interaction check - tournament_k5 + blend + {mut}",
             selection="tournament_k5",
             crossover="blend",
-            mutation=mut
+            mutation=mut,
             n_elites=5,  
             n_generations=3000,
         ))
+    
 
     # ------------------------------------------------------------------
     # Phase 10: Grid search — mutation_rate & vertex_sigma_max
