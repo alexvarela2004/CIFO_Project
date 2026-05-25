@@ -212,9 +212,13 @@ def make_mutation(name: str, n_generations: int, extra: dict = None):
     """
     Returns (mutation_operator, scheduler_or_None).
     n_generations is passed so decay schedulers are calibrated to the run length.
+    decay_n_generations in extra overrides the scheduler window independently of
+    n_generations - useful when the run budget is large but you want the sigma/delta
+    to decay faster (e.g. a 20k-gen run decaying as if it were a 5k-gen run).
     """
     extra = extra or {}
     mutation_rate = extra.get("mutation_rate", 0.05)
+    decay_n_generations = extra.get("decay_n_generations", n_generations)
 
     if name == "gaussian_fixed":
         op = GaussianMutation(
@@ -244,7 +248,7 @@ def make_mutation(name: str, n_generations: int, extra: dict = None):
         )
         scheduler = SigmaDecayScheduler(
             mutation=op,
-            n_generations=n_generations,
+            n_generations=decay_n_generations,
             vertex_sigma_max=vertex_sigma_max,
             vertex_sigma_min=vertex_sigma_min,
             color_sigma_max=color_sigma_max,
@@ -264,7 +268,7 @@ def make_mutation(name: str, n_generations: int, extra: dict = None):
         )
         scheduler = DeltaDecayScheduler(
             mutation=op,
-            n_generations=n_generations,
+            n_generations=decay_n_generations,
             vertex_delta_max=vertex_delta_max,
             vertex_delta_min=vertex_delta_min,
             color_delta_max=color_delta_max,
@@ -714,6 +718,7 @@ def build_experiment_plan() -> List[RunConfig]:
             "mutation_rate": 0.01,
             "vertex_sigma_max": 80.0,
             "color_sigma_max": 80.0,
+            "decay_n_generations": 5000,
         },
     ))
 
