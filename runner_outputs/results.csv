@@ -93,9 +93,9 @@ p10_rate_01_sigmax_80,42,10,"Grid search - mutation_rate=0.1, vertex_sigma_max=8
 p10_rate_02_sigmax_15,42,10,"Grid search - mutation_rate=0.2, vertex_sigma_max=15.0",tournament_k10,blend,gaussian_decay,3,50,3000,3000,32.179661,3125.1,False
 p10_rate_02_sigmax_40,42,10,"Grid search - mutation_rate=0.2, vertex_sigma_max=40.0",tournament_k10,blend,gaussian_decay,3,50,3000,3000,31.760891,3150.9,False
 p10_rate_02_sigmax_80,42,10,"Grid search - mutation_rate=0.2, vertex_sigma_max=80.0",tournament_k10,blend,gaussian_decay,3,50,3000,3000,31.622517,3314.1,False
-p11_pop_100,42,11,OFAT - population_size=100,tournament_k10,blend,gaussian_decay,3,100,3000,3000,22.761368,2914.7,False
-p11_pop_100,43,11,OFAT - population_size=100,tournament_k10,blend,gaussian_decay,3,100,3000,3000,22.052738,3598.9,False
-p11_pop_100,44,11,OFAT - population_size=100,tournament_k10,blend,gaussian_decay,3,100,3000,3000,22.030489,3936.3,False
-p11_pop_150,42,11,OFAT - population_size=150,tournament_k10,blend,gaussian_decay,3,150,3000,3000,21.635759,4529.4,False
-p11_pop_150,43,11,OFAT - population_size=150,tournament_k10,blend,gaussian_decay,3,150,3000,3000,21.854746,4254.9,False
-p11_pop_150,44,11,OFAT - population_size=150,tournament_k10,blend,gaussian_decay,3,150,3000,3000,21.697384,4427.2,False
+p11_pop_100,42,11,Population_size=100,tournament_k10,blend,gaussian_decay,3,100,3000,3000,22.761368,2914.7,False
+p11_pop_100,43,11,Population_size=100,tournament_k10,blend,gaussian_decay,3,100,3000,3000,22.052738,3598.9,False
+p11_pop_100,44,11,Population_size=100,tournament_k10,blend,gaussian_decay,3,100,3000,3000,22.030489,3936.3,False
+p11_pop_150,42,11,Population_size=150,tournament_k10,blend,gaussian_decay,3,150,3000,3000,21.635759,4529.4,False
+p11_pop_150,43,11,Population_size=150,tournament_k10,blend,gaussian_decay,3,150,3000,3000,21.854746,4254.9,False
+p11_pop_150,44,11,Population_size=150,tournament_k10,blend,gaussian_decay,3,150,3000,3000,21.697384,4427.2,False
