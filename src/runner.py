@@ -54,7 +54,7 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 
 # -- project imports
-from fitness import RMSEFitness
+from fitness import RMSEFitness, CIEDEFitness, SSIMFitness
 from ga import GeneticAlgorithm, GAConfig, EarlyStopping, DiversityAwareEarlyStopping
 from ga_operators.selection import TournamentSelection, RankSelection
 from ga_operators.crossover import (
@@ -212,9 +212,13 @@ def make_mutation(name: str, n_generations: int, extra: dict = None):
     """
     Returns (mutation_operator, scheduler_or_None).
     n_generations is passed so decay schedulers are calibrated to the run length.
+    decay_n_generations in extra overrides the scheduler window independently of
+    n_generations - useful when the run budget is large but you want the sigma/delta
+    to decay faster (e.g. a 20k-gen run decaying as if it were a 5k-gen run).
     """
     extra = extra or {}
     mutation_rate = extra.get("mutation_rate", 0.05)
+    decay_n_generations = extra.get("decay_n_generations", n_generations)
 
     if name == "gaussian_fixed":
         op = GaussianMutation(
@@ -244,7 +248,7 @@ def make_mutation(name: str, n_generations: int, extra: dict = None):
         )
         scheduler = SigmaDecayScheduler(
             mutation=op,
-            n_generations=n_generations,
+            n_generations=decay_n_generations,
             vertex_sigma_max=vertex_sigma_max,
             vertex_sigma_min=vertex_sigma_min,
             color_sigma_max=color_sigma_max,
@@ -264,7 +268,7 @@ def make_mutation(name: str, n_generations: int, extra: dict = None):
         )
         scheduler = DeltaDecayScheduler(
             mutation=op,
-            n_generations=n_generations,
+            n_generations=decay_n_generations,
             vertex_delta_max=vertex_delta_max,
             vertex_delta_min=vertex_delta_min,
             color_delta_max=color_delta_max,
@@ -303,6 +307,22 @@ def make_mutation(name: str, n_generations: int, extra: dict = None):
 # ---------------------------------------------------------------------------
 # Core single-seed run
 # ---------------------------------------------------------------------------
+def make_fitness(extra: dict, target: np.ndarray):
+    """
+    Instantiate the fitness function from the extra dict.
+    Defaults to RMSEFitness if no 'fitness' key is present —
+    preserves behaviour for all phases 1-11.
+    """
+    name = extra.get("fitness", "rmse")
+
+    if name == "rmse":
+        return RMSEFitness(target)
+    if name == "ciede2000":
+        return CIEDEFitness(target)
+    if name == "ssim":
+        return SSIMFitness(target)
+    raise ValueError(f"Unknown fitness function: {name}")
+
 
 def execute_single_run(cfg: RunConfig, seed: int, target: np.ndarray) -> dict:
     """
@@ -321,7 +341,7 @@ def execute_single_run(cfg: RunConfig, seed: int, target: np.ndarray) -> dict:
         d["seed"] = seed
         json.dump(d, f, indent=2)
 
-    fitness_fn = RMSEFitness(target)
+    fitness_fn = make_fitness(cfg.extra, target)
     selection = make_selection(cfg.selection, **cfg.extra)
     crossover = make_crossover(cfg.crossover)
     mutation_op, scheduler = make_mutation(cfg.mutation, cfg.n_generations, extra=cfg.extra)
@@ -714,9 +734,38 @@ def build_experiment_plan() -> List[RunConfig]:
             "mutation_rate": 0.01,
             "vertex_sigma_max": 80.0,
             "color_sigma_max": 80.0,
+            "decay_n_generations": 5000,
         },
     ))
 
+    # ------------------------------------------------------------------
+    # Phase 13: Challenge 1 — alternative fitness functions
+    # ------------------------------------------------------------------
+
+    BEST_P12 = dict(
+        selection="tournament_k10",
+        crossover="blend",
+        mutation="gaussian_decay",
+        n_elites=3,
+        population_size=150,
+        n_generations=3000,
+        init_strategy="quadrant",
+    )
+
+    BEST_P12_EXTRA = {
+        "mutation_rate":    0.01,
+        "vertex_sigma_max": 80.0,
+        "color_sigma_max":  80.0,
+    }
+
+    for fitness_name in ["ciede2000", "ssim"]:
+        runs.append(RunConfig(
+            name=f"p13_fitness_{fitness_name}",
+            phase=13,
+            description=f"Challenge 1 - {fitness_name} fitness function",
+            extra={**BEST_P12_EXTRA, "fitness": fitness_name},
+            **BEST_P12,
+        ))
     return runs
 
 # ---------------------------------------------------------------------------
