@@ -124,7 +124,7 @@ class MOIndividual:
         Returns
         -------
         list of float
-            [rmse_score, ciede_score, ssim_score] (or however many objectives).
+            [rmse_score, ciede_score] (or however many objectives).
         """
         if self._fitness_values is None:
             self._evaluate()

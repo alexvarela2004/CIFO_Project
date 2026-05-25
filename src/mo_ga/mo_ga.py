@@ -75,8 +75,7 @@ class MOGA:
     ----------
     fitness_fns : list of FitnessFunction
         Objective functions. Evaluated in order; indices are preserved
-        in MOIndividual.fitness_values. Typically [RMSEFitness, CIEDEFitness,
-        SSIMFitness].
+        in MOIndividual.fitness_values. Typically [RMSEFitness, CIEDEFitness].
     crossover : CrossoverOperator
         Any crossover operator from ga_operators.crossover.
     mutation : MutationOperator
@@ -296,7 +295,7 @@ class MOGA:
         }
 
         # Per-objective Pareto front statistics
-        obj_names = ["rmse", "ciede", "ssim"][: len(self._fitness_fns)]
+        obj_names = ["rmse", "ciede"][: len(self._fitness_fns)]
         for i, name in enumerate(obj_names):
             if i < len(front_stats.get("obj_mins", [])):
                 entry[f"front_{name}_min"]  = round(front_stats["obj_mins"][i], 6)
