@@ -3,7 +3,7 @@ mo_ga/runner_mo.py
 ------------------
 Runner for the NSGA-II multi-objective GA.
 
-Trains the GA optimising RMSE, CIEDE2000, and SSIM simultaneously.
+Trains the GA optimising RMSE and CIEDE2000 simultaneously.
 After each run, cross-evaluates the Pareto front against the single-objective
 RMSE GA result (if provided) for academic comparison.
 
@@ -12,7 +12,7 @@ trade-off between perceptual metrics than single-objective RMSE minimisation?
 
 Usage
 -----
-    # Run NSGA-II (3 objectives: RMSE + CIEDE + SSIM)
+    # Run NSGA-II (3 objectives: RMSE + CIEDE)
     python -m mo_ga.runner_mo --target data/girl_pearl.png
 
     # With cross-evaluation against a finished RMSE run
@@ -29,7 +29,6 @@ runner_outputs/
         seed_42/
             best_rmse_individual.png         <- front member with best RMSE
             best_ciede_individual.png        <- front member with best CIEDE
-            best_ssim_individual.png         <- front member with best SSIM
             pareto_front.json                <- all front members
             generation_log.json
             ga_config.json
@@ -44,8 +43,8 @@ runner_outputs/
 mo_comparison_results.csv columns
 ----------------------------------
 seed, front_size,
-mo_best_rmse, mo_best_ciede, mo_best_ssim,
-rmse_run_rmse, rmse_run_ciede, rmse_run_ssim,
+mo_best_rmse, mo_best_ciede,
+rmse_run_rmse, rmse_run_ciede,
 elapsed_s, n_generations_run
 """
 
@@ -61,7 +60,7 @@ from typing import List, Optional
 
 import numpy as np
 
-from fitness import RMSEFitness, CIEDEFitness, SSIMFitness
+from fitness import RMSEFitness, CIEDEFitness
 from ga import GAConfig, EarlyStopping, DiversityAwareEarlyStopping
 from ga_operators.crossover import BlendCrossover
 from ga_operators.mutation import GaussianMutation, SigmaDecayScheduler
@@ -140,8 +139,7 @@ def run_seed(
     # -- Build fitness functions
     rmse_fn  = RMSEFitness(target)
     ciede_fn = CIEDEFitness(target)
-    ssim_fn  = SSIMFitness(target)
-    fitness_fns = [rmse_fn, ciede_fn, ssim_fn]
+    fitness_fns = [rmse_fn, ciede_fn]
 
     # -- Build operators (same best config from phases 1-11)
     mutation_op = GaussianMutation(
@@ -205,7 +203,7 @@ def run_seed(
             }
 
             # Per-objective front min
-            obj_names = ["rmse", "ciede", "ssim"]
+            obj_names = ["rmse", "ciede"]
             for i, name in enumerate(obj_names):
                 if i < len(front_stats.get("obj_mins", [])):
                     metrics[f"front_{name}_min"] = round(front_stats["obj_mins"][i], 6)
@@ -236,14 +234,11 @@ def run_seed(
     if pareto_front:
         best_by_rmse  = min(pareto_front, key=lambda x: x.fitness_values[0])
         best_by_ciede = min(pareto_front, key=lambda x: x.fitness_values[1])
-        best_by_ssim  = min(pareto_front, key=lambda x: x.fitness_values[2])
 
         save_render(render(best_by_rmse.triangles),
                     os.path.join(seed_dir, "best_rmse_individual.png"))
         save_render(render(best_by_ciede.triangles),
                     os.path.join(seed_dir, "best_ciede_individual.png"))
-        save_render(render(best_by_ssim.triangles),
-                    os.path.join(seed_dir, "best_ssim_individual.png"))
 
         triangles_to_json(
             list(best_by_rmse.triangles),
@@ -260,29 +255,27 @@ def run_seed(
     if pareto_front:
         mo_best_rmse  = min(ind.fitness_values[0] for ind in pareto_front)
         mo_best_ciede = min(ind.fitness_values[1] for ind in pareto_front)
-        mo_best_ssim  = min(ind.fitness_values[2] for ind in pareto_front)
     else:
-        mo_best_rmse = mo_best_ciede = mo_best_ssim = float("nan")
+        mo_best_rmse = mo_best_ciede = float("nan")
 
     logger.info(
         "NSGA-II done | seed=%d | front_size=%d | "
-        "best_rmse=%.4f | best_ciede=%.4f | best_ssim=%.4f | %.1fs",
+        "best_rmse=%.4f | best_ciede=%.4f | %.1fs",
         seed, len(pareto_front),
-        mo_best_rmse, mo_best_ciede, mo_best_ssim, elapsed,
+        mo_best_rmse, mo_best_ciede, elapsed,
     )
 
     # -- Cross-evaluate RMSE best if provided
-    rmse_run_rmse = rmse_run_ciede = rmse_run_ssim = ""
+    rmse_run_rmse = rmse_run_ciede = ""
     if rmse_best_path is not None:
         logger.info("Loading RMSE best from %s", rmse_best_path)
         rmse_triangles = triangles_from_json(rmse_best_path)
         rmse_rendered  = render(rmse_triangles)
         rmse_run_rmse  = round(rmse_fn.evaluate(rmse_rendered),  6)
         rmse_run_ciede = round(ciede_fn.evaluate(rmse_rendered), 6)
-        rmse_run_ssim  = round(ssim_fn.evaluate(rmse_rendered),  6)
         logger.info(
-            "RMSE cross-eval | seed=%d | rmse=%.4f | ciede=%.4f | ssim=%.4f",
-            seed, rmse_run_rmse, rmse_run_ciede, rmse_run_ssim,
+            "RMSE cross-eval | seed=%d | rmse=%.4f | ciede=%.4f",
+            seed, rmse_run_rmse, rmse_run_ciede
         )
 
     row = {
@@ -292,10 +285,8 @@ def run_seed(
         "elapsed_s":        round(elapsed, 1),
         "mo_best_rmse":     round(mo_best_rmse,  6) if not isinstance(mo_best_rmse, float) or not np.isnan(mo_best_rmse) else "",
         "mo_best_ciede":    round(mo_best_ciede, 6) if not isinstance(mo_best_ciede, float) or not np.isnan(mo_best_ciede) else "",
-        "mo_best_ssim":     round(mo_best_ssim,  6) if not isinstance(mo_best_ssim, float) or not np.isnan(mo_best_ssim) else "",
         "rmse_run_rmse":    rmse_run_rmse,
         "rmse_run_ciede":   rmse_run_ciede,
-        "rmse_run_ssim":    rmse_run_ssim,
     }
 
     _append_csv(COMPARISON_CSV, row)
@@ -362,7 +353,7 @@ def main() -> None:
     # Summary
     if all_results:
         print("\n--- NSGA-II Summary ---")
-        print(f"{'Seed':>5} {'Front':>6} {'Best RMSE':>10} {'Best CIEDE':>12} {'Best SSIM':>10}")
+        print(f"{'Seed':>5} {'Front':>6} {'Best RMSE':>10} {'Best CIEDE':>12}")
         print("-" * 50)
         for r in all_results:
             print(
@@ -370,7 +361,6 @@ def main() -> None:
                 f"{r['front_size']:>6} "
                 f"{r['mo_best_rmse']:>10} "
                 f"{r['mo_best_ciede']:>12} "
-                f"{r['mo_best_ssim']:>10} "
             )
 
     logger.info("All done. Results in %s", COMPARISON_CSV)
