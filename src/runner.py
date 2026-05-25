@@ -53,7 +53,10 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 
-# -- project imports
+# ---------------------------------------------------------------------------
+# Project imports
+# ---------------------------------------------------------------------------
+
 from fitness import RMSEFitness, CIEDEFitness, SSIMFitness
 from ga import GeneticAlgorithm, GAConfig, EarlyStopping, DiversityAwareEarlyStopping
 from ga_operators.selection import TournamentSelection, RankSelection
@@ -72,6 +75,7 @@ from ga_operators.mutation import (
     CompositeMutation,
     SigmaDecayScheduler,
     DeltaDecayScheduler,
+    CompositeSigmaDecayScheduler
 )
 from ga_utils import load_target, save_render, render, triangles_to_json
 
@@ -181,6 +185,7 @@ def append_config_results(config_name: str, row: dict) -> None:
 # ---------------------------------------------------------------------------
 
 def make_selection(name: str, **kwargs):
+    """Instantiate and return a selection operator by name."""
     if name == "tournament_k2":
         return TournamentSelection(tournament_size=2)
     if name == "tournament_k3":
@@ -195,6 +200,7 @@ def make_selection(name: str, **kwargs):
 
 
 def make_crossover(name: str):
+    """Instantiate and return a crossover operator by name."""
     if name == "uniform":
         return UniformCrossover(swap_prob=0.5)
     if name == "single_point":
@@ -301,6 +307,24 @@ def make_mutation(name: str, n_generations: int, extra: dict = None):
             SwapMutation(mutation_rate=0.2, n_swaps=1),
         ])
         return op, None
+    
+    if name == "composite_gaussian_decay":
+        gaussian = GaussianMutation(mutation_rate=0.05, vertex_sigma=40.0, color_sigma=40.0)
+        composite = CompositeMutation([
+            gaussian,
+            ResetMutation(mutation_rate=0.01),
+            SwapMutation(mutation_rate=0.2, n_swaps=1),
+        ])
+        scheduler = CompositeSigmaDecayScheduler(
+            gaussian_op=gaussian,
+            n_generations=n_generations,
+            vertex_sigma_max=40.0,
+            vertex_sigma_min=2.0,
+            color_sigma_max=40.0,
+            color_sigma_min=2.0,
+        )
+        return composite, scheduler
+        
 
     raise ValueError(f"Unknown mutation: {name}")
 
@@ -492,14 +516,8 @@ def execute_run(cfg: RunConfig, seeds: List[int], target: np.ndarray) -> List[di
 
 def build_experiment_plan() -> List[RunConfig]:
     """
-    Define all configurations across phases 1-5.
+    Define all configurations across phases.
     Each config is run once per seed in execute_run().
-
-    Phase 1 - baseline
-    Phase 2 - elitism sweep
-    Phase 3 - selection sweep
-    Phase 4 - crossover sweep
-    Phase 5 - mutation sweep
     """
     runs: List[RunConfig] = []
 
@@ -579,6 +597,7 @@ def build_experiment_plan() -> List[RunConfig]:
         "creep_decay",
         "composite_gaussian",
         "composite_creep",
+        "composite_gaussian_decay"
     ]:
         runs.append(RunConfig(
             name=f"p5_mut_{mut_name}",
@@ -627,7 +646,7 @@ def build_experiment_plan() -> List[RunConfig]:
     # ------------------------------------------------------------------
     # Phase 8: Elitism re-test with best operators
     # ------------------------------------------------------------------
-    for n_elites in [1, 3, 7, 10]:  #5 ja foi testada na fase 5 
+    for n_elites in [1, 3, 7, 10]:  # 5 was already tested in phase 5
         runs.append(RunConfig(
             name=f"p8_elites_{n_elites}",
             phase=8,
@@ -642,8 +661,9 @@ def build_experiment_plan() -> List[RunConfig]:
     # ---------------------------------------------------------------------------
     # Phase 9: Interaction check — tournament_k5 with best mutations
     # ---------------------------------------------------------------------------
-    #nao testamos a melhor selection com as 2 melhores mutations pq ja se fez isso na fase 5
-    # nao testamos crossover porque spread é tão pequeno, qualquer diferença entre crossovers está provavelmente dentro da variação aleatória entre seeds — ou seja, não é estatisticamente significativa.
+    # We do not test the best selection with the top 2 mutations as this was already done in phase 5
+    # We do not test crossover because the spread is so small that any difference between crossovers
+    # is likely within the random variation between seeds - not statistically significant.
 
     for mut in ["gaussian_decay", "creep_decay"]:
         runs.append(RunConfig(
@@ -658,14 +678,13 @@ def build_experiment_plan() -> List[RunConfig]:
         ))
 
     # ------------------------------------------------------------------
-    # Phase 10: Grid search — mutation_rate × vertex_sigma_max
-    # Testa a interação entre frequência e magnitude das perturbações
+    # Phase 10: Grid search — mutation_rate & vertex_sigma_max
     # ------------------------------------------------------------------
+    # Tests the interaction between perturbation frequency and magnitude
 
     for rate in [0.01, 0.05, 0.10, 0.20]:
         for sigma_max in [15.0, 40.0, 80.0]:
 
-            # não re-correr o que já existe na fase 5
             if rate == 0.05 and sigma_max == 40.0:
                 continue
 
@@ -673,10 +692,10 @@ def build_experiment_plan() -> List[RunConfig]:
                 name=f"p10_rate_{str(rate).replace('.','')}_sigmax_{int(sigma_max)}",
                 phase=10,
                 description=f"Grid search - mutation_rate={rate}, vertex_sigma_max={sigma_max}",
-                selection="tournament_k10", #garantir que continua a ser apos fase 9
+                selection="tournament_k10", 
                 crossover="blend",
-                mutation="gaussian_decay", #garantir que continua a ser apos fase 9
-                n_elites=7, # melhor da fase 8
+                mutation="gaussian_decay", 
+                n_elites=7, # best of phase 8
                 n_generations=3000,
                 extra={
                     "mutation_rate": rate,
@@ -687,7 +706,7 @@ def build_experiment_plan() -> List[RunConfig]:
 
 
     # ------------------------------------------------------------------
-    # Phase 11: testing population size
+    # Phase 11: Testing population size
     # ------------------------------------------------------------------
 
     BEST_P10 = dict(
@@ -827,8 +846,9 @@ def main() -> None:
         "Target loaded from %s | shape=%s | seeds=%s",
         args.target, target.shape, seeds,
     )
-
-    # filter configs
+    # ---------------------------------------------------------------------------
+    # Filter configs
+    # ---------------------------------------------------------------------------
     if args.run is not None:
         matching = [c for c in plan if c.name == args.run]
         if not matching:
@@ -859,7 +879,10 @@ def main() -> None:
 
     logger.info("All runs complete. Global results in %s", RESULTS_CSV)
 
-    # summary grouped by config
+    # ---------------------------------------------------------------------------
+    # Summary grouped by config
+    # ---------------------------------------------------------------------------
+    
     if all_results:
         print("\n--- Summary ---")
         print(f"{'Config':<35} {'Seeds':>5} {'Mean':>10} {'Std':>8} {'Best':>10}")
