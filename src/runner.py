@@ -672,8 +672,8 @@ def build_experiment_plan() -> List[RunConfig]:
             description=f"Interaction check - tournament_k5 + blend + {mut}",
             selection="tournament_k5",
             crossover="blend",
-            mutation=mut,
-            n_elites=5,  # susbtituir pelo melhor da fase 8
+            mutation=mut
+            n_elites=5,  
             n_generations=3000,
         ))
 
@@ -728,7 +728,7 @@ def build_experiment_plan() -> List[RunConfig]:
         runs.append(RunConfig(
             name=f"p11_pop_{pop}",
             phase=11,
-            description=f"OFAT - population_size={pop}",
+            description=f"Population_size={pop}",
             population_size=pop,
             extra=BEST_P10_EXTRA,
             **BEST_P10,
@@ -882,7 +882,7 @@ def main() -> None:
     # ---------------------------------------------------------------------------
     # Summary grouped by config
     # ---------------------------------------------------------------------------
-    
+
     if all_results:
         print("\n--- Summary ---")
         print(f"{'Config':<35} {'Seeds':>5} {'Mean':>10} {'Std':>8} {'Best':>10}")
