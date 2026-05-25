@@ -786,6 +786,46 @@ def build_experiment_plan() -> List[RunConfig]:
             extra={**BEST_P12_EXTRA, "fitness": fitness_name},
             **BEST_P12,
         ))
+
+    # ------------------------------------------------------------------
+    # Phase 14: Generalisation test on unseen images
+    # ------------------------------------------------------------------
+    runs.append(RunConfig(
+        name="p14_mona_lisa",
+        phase=14,
+        description="Generalisation test - Mona Lisa",
+        selection="tournament_k10",
+        crossover="blend",
+        mutation="gaussian_decay",
+        n_elites=3,
+        population_size=150,
+        n_generations=3000,
+        init_strategy= "quadrant",
+        extra={
+            "mutation_rate": 0.01,
+            "vertex_sigma_max": 80.0,
+            "color_sigma_max": 80.0,
+        },
+    ))
+
+    runs.append(RunConfig(
+        name="p14_mondrian",
+        phase=14,
+        description="Generalisation test - Mondrian Composition II",
+        selection="tournament_k10",
+        crossover="blend",
+        mutation="gaussian_decay",
+        n_elites=3,
+        population_size=150,
+        n_generations=3000,
+        init_strategy= "quadrant",
+        extra={
+            "mutation_rate": 0.01,
+            "vertex_sigma_max": 80.0,
+            "color_sigma_max": 80.0,
+        },
+    ))
+
     return runs
 
 # ---------------------------------------------------------------------------
