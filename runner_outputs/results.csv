@@ -14,9 +14,6 @@ p2_elites_3,44,2,Elitism sweep - 3 elites,tournament_k3,uniform,gaussian_fixed,3
 p2_elites_5,42,2,Elitism sweep - 5 elites,tournament_k3,uniform,gaussian_fixed,5,50,3000,3000,29.016758,1192.4,False
 p2_elites_5,43,2,Elitism sweep - 5 elites,tournament_k3,uniform,gaussian_fixed,5,50,3000,3000,29.316401,1174.1,False
 p2_elites_5,44,2,Elitism sweep - 5 elites,tournament_k3,uniform,gaussian_fixed,5,50,3000,3000,30.728035,1143.5,False
-p2_elites_7,42,2,Elitism sweep - 7 elites,tournament_k3,uniform,gaussian_fixed,7,50,3000,3000,28.682512,1105.1,False
-p2_elites_7,43,2,Elitism sweep - 7 elites,tournament_k3,uniform,gaussian_fixed,7,50,3000,3000,29.995001,1148.7,False
-p2_elites_7,44,2,Elitism sweep - 7 elites,tournament_k3,uniform,gaussian_fixed,7,50,3000,3000,29.181164,1103.9,False
 p3_sel_tournament_k2,42,3,Selection sweep - tournament_k2,tournament_k2,uniform,gaussian_fixed,5,50,3000,3000,30.833626,1137.2,False
 p3_sel_tournament_k2,43,3,Selection sweep - tournament_k2,tournament_k2,uniform,gaussian_fixed,5,50,3000,3000,30.097784,1960.1,False
 p3_sel_tournament_k2,44,3,Selection sweep - tournament_k2,tournament_k2,uniform,gaussian_fixed,5,50,3000,3000,30.567793,1193.4,False
