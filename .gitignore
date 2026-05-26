@@ -59,9 +59,3 @@ outputs/checkpoints/
 outputs/*.png
 outputs/*.json
 
-# ============================================================
-# Data (large files — share separately)
-# ============================================================
-data/*.png
-data/*.jpg
-data/*.jpeg
