@@ -4,8 +4,8 @@ runner.py
 Experiment runner for the GA image approximation project.
 
 Executes the full phase-based experiment plan (phases 1-5) defined in the
-project tracker. Each configuration is run with multiple seeds to support
-statistical comparison (Mann-Whitney U test, mean/std reporting).
+project tracker. Each configuration is run with multiple seeds to account 
+for the stochastic nature of the algorithm. .
 
 Output structure
 ----------------
@@ -537,7 +537,7 @@ def build_experiment_plan() -> List[RunConfig]:
     # ------------------------------------------------------------------
     # Phase 2: Elitism sweep
     # ------------------------------------------------------------------
-    for n_elites, label in [(0, "0"), (1, "1"), (3, "3"), (5, "5"), (7, "7")]:
+    for n_elites, label in [(0, "0"), (1, "1"), (3, "3"), (5, "5")]:
         runs.append(RunConfig(
             name=f"p2_elites_{label}",
             phase=2,
@@ -624,11 +624,10 @@ def build_experiment_plan() -> List[RunConfig]:
     ))
 
     # ------------------------------------------------------------------
-    # Phase 7: Init strategy sweep
+    # Phase 7: Init strategy sweep - tested with 500 generations
     # ------------------------------------------------------------------
     for strategy in [
-        "random", "image", "mixed", "grid",
-        "semi_transparent", "small_random", "grid_random_color",
+        "random", "semi_transparent", "small_random", "grid_random_color",
         "sorted_alpha", "quadrant",
     ]:
         runs.append(RunConfig(
@@ -639,7 +638,7 @@ def build_experiment_plan() -> List[RunConfig]:
             crossover="two_point",
             mutation="gaussian_decay",
             n_elites=5,
-            n_generations=3000,
+            n_generations=500,
             init_strategy=strategy,
         ))
 
@@ -656,6 +655,7 @@ def build_experiment_plan() -> List[RunConfig]:
             mutation="gaussian_decay",
             n_elites=n_elites,
             n_generations=3000,
+            init_strategy= "quadrant"
         ))
 
     # ---------------------------------------------------------------------------
@@ -673,8 +673,9 @@ def build_experiment_plan() -> List[RunConfig]:
             selection="tournament_k5",
             crossover="blend",
             mutation=mut,
-            n_elites=5,  
+            n_elites=3,  
             n_generations=3000,
+            init_strategy= "quadrant"
         ))
     
 
@@ -696,8 +697,9 @@ def build_experiment_plan() -> List[RunConfig]:
                 selection="tournament_k10", 
                 crossover="blend",
                 mutation="gaussian_decay", 
-                n_elites=7, # best of phase 8
+                n_elites=3, 
                 n_generations=3000,
+                init_strategy="quadrant",
                 extra={
                     "mutation_rate": rate,
                     "vertex_sigma_max": sigma_max,
@@ -737,7 +739,7 @@ def build_experiment_plan() -> List[RunConfig]:
     
 
     # ------------------------------------------------------------------
-    # Phase 12: Final run - best config with 20000 generations
+    # Phase 12: Final run - best configs with 20000 generations
     # ------------------------------------------------------------------
     runs.append(RunConfig(
         name="p12_final",

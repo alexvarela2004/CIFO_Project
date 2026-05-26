@@ -503,7 +503,7 @@ class Individual:
         n_cols : int
             Number of grid columns. Default 5.
         n_rows : int
-            Number of grid rows. Default 5 → 25 cells,
+            Number of grid rows. Default 5 -> 25 cells,
             each receiving 4 triangles (100 / 25 = 4).
         cache_render : bool
             Whether to cache the rendered array after evaluation.

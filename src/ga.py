@@ -457,7 +457,7 @@ class GeneticAlgorithm:
         Parameters
         ----------
         target : np.ndarray, optional
-            H×W×3 uint8 RGB array of the target image. Required when
+            HxWx3 uint8 RGB array of the target image. Required when
             init_strategy is 'image' or 'mixed'. Ignored for 'random'.
         init_strategy : str
             Population initialisation strategy. One of:

@@ -482,17 +482,17 @@ def main() -> None:
     target = load_target(args.target)
     logger.info("Target shape: %s", target.shape)
     logger.info(
-        "Running 2 configs × %d runs = %d total GA runs  (pop=%d, gens=%d)",
+        "Running 2 configs x %d runs = %d total GA runs  (pop=%d, gens=%d)",
         args.n_runs, 2 * args.n_runs, POPULATION_SIZE, n_generations,
     )
 
-    # ── Run ───────────────────────────────────────────────────────────────
+    #  Run 
     results = collect_results(target, args.n_runs, n_generations)
 
-    # ── Statistical test ──────────────────────────────────────────────────
+    #  Statistical test 
     test_result = run_statistical_test(results["best_model"], results["baseline"])
 
-    # ── Output ────────────────────────────────────────────────────────────
+    #  Output 
     print_summary(results, test_result)
     save_outputs(results, test_result, args.out_dir)
     make_boxplot(results, test_result, args.out_dir)
