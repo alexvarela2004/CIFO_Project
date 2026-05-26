@@ -201,12 +201,12 @@ class Population:
         """
         Create a Population with grid-anchored triangles and random colours.
 
-        Divides the canvas into an n_cols × n_rows grid and anchors triangles
+        Divides the canvas into an n_cols x n_rows grid and anchors triangles
         to grid cells, guaranteeing full spatial coverage from generation 0.
         Unlike from_grid(), colours are fully random rather than sampled from
         the target image — this serves as a controlled ablation variant to
         isolate the contribution of spatial coverage from image-seeded colour.
-        Gaussian vertex noise (default σ = 0.3 × cell_size) is applied per
+        Gaussian vertex noise (default σ = 0.3 x cell_size) is applied per
         individual to ensure population diversity.
 
         Parameters
@@ -223,7 +223,7 @@ class Population:
             Number of grid rows. Default 10.
         vertex_noise_sigma : float or None
             Gaussian noise std-dev for vertex perturbation per individual.
-            If None, defaults to 0.3 × min(cell_width, cell_height).
+            If None, defaults to 0.3 x min(cell_width, cell_height).
 
         Returns
         -------
@@ -295,7 +295,7 @@ class Population:
         """
         Create a Population with triangles distributed across canvas quadrants.
 
-        The canvas is divided into n_cols × n_rows cells and triangles are
+        The canvas is divided into n_cols x n_rows cells and triangles are
         distributed proportionally, with each triangle's vertices constrained
         to lie within its assigned cell. This guarantees uniform spatial
         coverage without requiring image information, unlike from_grid_random_color().
