@@ -66,7 +66,7 @@ from ga_operators.crossover import BlendCrossover
 from ga_operators.mutation import GaussianMutation, SigmaDecayScheduler
 from mo_ga.mo_ga import MOGA
 from mo_ga.mo_individual import MOIndividual
-from utils import load_target, save_render, render, triangles_to_json, triangles_from_json
+from ga_utils import load_target, save_render, render, triangles_to_json, triangles_from_json
 
 # ---------------------------------------------------------------------------
 # Logging

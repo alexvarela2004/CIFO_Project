@@ -1,5 +1,0 @@
-run_name,seed,phase,description,selection,crossover,mutation,n_elites,population_size,n_generations_max,n_generations_run,final_best_fitness,elapsed_s,stopped_early
-p7_init_random,42,7,Init strategy sweep - random,tournament_k10,two_point,gaussian_decay,5,50,500,500,29.59379,571.1,False
-p7_init_image,42,7,Init strategy sweep - image,tournament_k10,two_point,gaussian_decay,5,50,500,500,28.600775,440.5,False
-p7_init_mixed,42,7,Init strategy sweep - mixed,tournament_k10,two_point,gaussian_decay,5,50,500,500,29.600246,584.7,False
-p7_init_grid,42,7,Init strategy sweep - grid,tournament_k10,two_point,gaussian_decay,5,50,500,500,28.618877,393.3,False

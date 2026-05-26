@@ -759,8 +759,8 @@ def build_experiment_plan() -> List[RunConfig]:
     ))
 
     runs.append(RunConfig(
-        name="p14_final_300",
-        phase=14,
+        name="p12_final_300",
+        phase=12,
         description="Final run - best config with 20000 generations, 300 population",
         selection="tournament_k10",
         crossover="blend",
@@ -776,6 +776,7 @@ def build_experiment_plan() -> List[RunConfig]:
             "decay_n_generations": 5000,
         },
     ))
+
 
     # ------------------------------------------------------------------
     # Phase 13: Challenge 1 — alternative fitness functions
@@ -828,9 +829,9 @@ def build_experiment_plan() -> List[RunConfig]:
     ))
 
     runs.append(RunConfig(
-        name="p14_mondrian",
+        name="p14_nadir",
         phase=14,
-        description="Generalisation test - Mondrian Composition II",
+        description="Generalisation test - Nadir Afonso Painting",
         selection="tournament_k10",
         crossover="blend",
         mutation="gaussian_decay",
@@ -844,6 +845,7 @@ def build_experiment_plan() -> List[RunConfig]:
             "color_sigma_max": 80.0,
         },
     ))
+
 
     return runs
 
