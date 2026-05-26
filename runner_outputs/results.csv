@@ -62,26 +62,39 @@ p5_mut_creep_decay,44,5,Mutation sweep - creep_decay,tournament_k10,two_point,cr
 p5_mut_composite_creep,42,5,Mutation sweep - composite_creep,tournament_k10,two_point,composite_creep,5,50,3000,3000,27.561501,1048.0,False
 p5_mut_composite_creep,43,5,Mutation sweep - composite_creep,tournament_k10,two_point,composite_creep,5,50,3000,3000,27.134125,1174.5,False
 p5_mut_composite_creep,44,5,Mutation sweep - composite_creep,tournament_k10,two_point,composite_creep,5,50,3000,3000,28.236324,1270.6,False
-p5_mut_composite_gaussian_decay,42,7,Advanced mutation - composite_gaussian_decay,tournament_k10,two_point,composite_gaussian_decay,5,50,3000,3000,25.835899,1108.4,False
-p5_mut_composite_gaussian_decay,43,7,Advanced mutation - composite_gaussian_decay,tournament_k10,two_point,composite_gaussian_decay,5,50,3000,3000,25.630869,1194.6,False
-p5_mut_composite_gaussian_decay,44,7,Advanced mutation - composite_gaussian_decay,tournament_k10,two_point,composite_gaussian_decay,5,50,3000,3000,25.912867,1129.3,False
+p5_mut_composite_gaussian_decay,42,5,Mutation sweep - composite_gaussian_decay,tournament_k10,two_point,composite_gaussian_decay,5,50,3000,3000,25.835899,1108.4,False
+p5_mut_composite_gaussian_decay,43,5,Mutation sweep - composite_gaussian_decay,tournament_k10,two_point,composite_gaussian_decay,5,50,3000,3000,25.630869,1194.6,False
+p5_mut_composite_gaussian_decay,44,5,Mutation sweep - composite_gaussian_decay,tournament_k10,two_point,composite_gaussian_decay,5,50,3000,3000,25.912867,1212.6,False
 p6_gaussian_decay_5k,43,6,Best config with 20000 generations,tournament_k10,two_point,gaussian_decay,5,50,20000,20000,21.62039,17831.2,False
 p6_gaussian_decay_5k,44,6,Best config with 20000 generations,tournament_k10,two_point,gaussian_decay,5,50,20000,20000,22.873709,17886.2,False
-p7_init_random,42,7,Init strategy sweep - random,tournament_k10,two_point,gaussian_decay,5,50,500,500,29.59379,423.6,Falsegit
-p7_init_semi_transparent,42,7,Init strategy sweep - semi_transparent,tournament_k10,two_point,gaussian_decay,5,50,500,500,30.786959,431.9,False
-p7_init_small_random,42,7,Init strategy sweep - small_random,tournament_k10,two_point,gaussian_decay,5,50,500,500,33.224174,354.3,False
-p7_init_grid_random_color,42,7,Init strategy sweep - grid_random_color,tournament_k10,two_point,gaussian_decay,5,50,500,500,32.494717,357.6,False
-p7_init_sorted_alpha,42,7,Init strategy sweep - sorted_alpha,tournament_k10,two_point,gaussian_decay,5,50,500,500,30.783241,419.6,False
-p7_init_quadrant,42,7,Init strategy sweep - quadrant,tournament_k10,two_point,gaussian_decay,5,50,500,500,29.501495,356.4,False
-p7_init_quadrant,42,7,Init strategy sweep - quadrant with 3000 generations,tournament_k10,two_point,gaussian_decay,5,50,3000,3000,24.45686,2236.0,False
+p7_init_random,42,7,Init strategy sweep - random,tournament_k10,two_point,gaussian_decay,5,50,500,500,29.59379,433.9,False
+p7_init_random,43,7,Init strategy sweep - random,tournament_k10,two_point,gaussian_decay,5,50,500,500,31.902037,425.4,False
+p7_init_random,44,7,Init strategy sweep - random,tournament_k10,two_point,gaussian_decay,5,50,500,500,31.957956,431.8,False
+p7_init_semi_transparent,42,7,Init strategy sweep - semi_transparent,tournament_k10,two_point,gaussian_decay,5,50,500,500,30.786959,702.2,False
+p7_init_semi_transparent,43,7,Init strategy sweep - semi_transparent,tournament_k10,two_point,gaussian_decay,5,50,500,500,29.636883,342.1,False
+p7_init_semi_transparent,44,7,Init strategy sweep - semi_transparent,tournament_k10,two_point,gaussian_decay,5,50,500,500,30.334389,301.2,False
+p7_init_small_random,42,7,Init strategy sweep - small_random,tournament_k10,two_point,gaussian_decay,5,50,500,500,33.224174,259.4,False
+p7_init_small_random,43,7,Init strategy sweep - small_random,tournament_k10,two_point,gaussian_decay,5,50,500,500,31.576845,258.0,False
+p7_init_small_random,44,7,Init strategy sweep - small_random,tournament_k10,two_point,gaussian_decay,5,50,500,500,31.992077,262.7,False
+p7_init_grid_random_color,42,7,Init strategy sweep - grid_random_color,tournament_k10,two_point,gaussian_decay,5,50,500,500,32.494717,258.5,False
+p7_init_grid_random_color,43,7,Init strategy sweep - grid_random_color,tournament_k10,two_point,gaussian_decay,5,50,500,500,30.912292,263.0,False
+p7_init_grid_random_color,44,7,Init strategy sweep - grid_random_color,tournament_k10,two_point,gaussian_decay,5,50,500,500,30.351353,257.6,False
+p7_init_sorted_alpha,42,7,Init strategy sweep - sorted_alpha,tournament_k10,two_point,gaussian_decay,5,50,500,500,30.783241,305.7,False
+p7_init_sorted_alpha,43,7,Init strategy sweep - sorted_alpha,tournament_k10,two_point,gaussian_decay,5,50,500,500,31.415016,315.9,False
+p7_init_sorted_alpha,44,7,Init strategy sweep - sorted_alpha,tournament_k10,two_point,gaussian_decay,5,50,500,500,31.187719,314.5,False
+p7_init_quadrant,42,7,Init strategy sweep - quadrant,tournament_k10,two_point,gaussian_decay,5,50,500,500,29.501495,254.9,False
+p7_init_quadrant,43,7,Init strategy sweep - quadrant,tournament_k10,two_point,gaussian_decay,5,50,500,500,31.203312,254.6,False
+p7_init_quadrant,44,7,Init strategy sweep - quadrant,tournament_k10,two_point,gaussian_decay,5,50,500,500,30.043781,150.0,False
 p8_elites_1,42,8,Elitism retest (best operators) - 1 elites,tournament_k10,blend,gaussian_decay,1,50,3000,3000,24.379875,8173.6,False
 p8_elites_3,42,8,Elitism retest (best operators) - 3 elites,tournament_k10,blend,gaussian_decay,3,50,3000,3000,24.35285,7669.3,False
 p8_elites_7,42,8,Elitism retest (best operators) - 7 elites,tournament_k10,blend,gaussian_decay,7,50,3000,3000,24.859926,6906.0,False
 p8_elites_10,42,8,Elitism retest (best operators) - 10 elites,tournament_k10,blend,gaussian_decay,10,50,3000,3000,25.83699,4862.9,False
 p9_k5_gaussian_decay,42,9,Interaction check - tournament_k5 + blend + gaussian_decay,tournament_k5,blend,gaussian_decay,3,50,3000,3000,27.163986,3186.5,False
+p9_k5_gaussian_decay,43,9,Interaction check - tournament_k5 + blend + gaussian_decay,tournament_k5,blend,gaussian_decay,3,50,3000,3000,26.396639,1469.2,False
+p9_k5_gaussian_decay,44,9,Interaction check - tournament_k5 + blend + gaussian_decay,tournament_k5,blend,gaussian_decay,3,50,3000,3000,27.523243,1478.2,False
 p9_k5_creep_decay,42,9,Interaction check - tournament_k5 + blend + creep_decay,tournament_k5,blend,creep_decay,3,50,3000,3000,28.030521,3030.7,False
-p9_k5_gaussian_decay,42,9,Interaction check - tournament_k5 + blend + gaussian_decay,tournament_k5,blend,gaussian_decay,3,50,3000,3000,27.163986,3187.9,False
-p9_k5_creep_decay,42,9,Interaction check - tournament_k5 + blend + creep_decay,tournament_k5,blend,creep_decay,3,50,3000,3000,28.030521,3039.0,False
+p9_k5_creep_decay,43,9,Interaction check - tournament_k5 + blend + creep_decay,tournament_k5,blend,creep_decay,3,50,3000,3000,28.198256,1352.7,False
+p9_k5_creep_decay,44,9,Interaction check - tournament_k5 + blend + creep_decay,tournament_k5,blend,creep_decay,3,50,3000,3000,29.098661,1335.1,False
 p10_rate_001_sigmax_15,42,10,"Grid search - mutation_rate=0.01, vertex_sigma_max=15.0",tournament_k10,blend,gaussian_decay,3,50,3000,3000,25.238182,2961.5,False
 p10_rate_001_sigmax_40,42,10,"Grid search - mutation_rate=0.01, vertex_sigma_max=40.0",tournament_k10,blend,gaussian_decay,3,50,3000,3000,23.636309,3080.1,False
 p10_rate_001_sigmax_80,42,10,"Grid search - mutation_rate=0.01, vertex_sigma_max=80.0",tournament_k10,blend,gaussian_decay,3,50,3000,3000,22.991407,3063.0,False
@@ -108,3 +121,4 @@ p13_fitness_ssim,42,13,Challenge 1 - ssim fitness function,tournament_k10,blend,
 p13_fitness_ssim,43,13,Challenge 1 - ssim fitness function,tournament_k10,blend,gaussian_decay,3,50,3000,3000,0.477639,6432.0,False
 p13_fitness_ssim,44,13,Challenge 1 - ssim fitness function,tournament_k10,blend,gaussian_decay,3,50,3000,3000,0.468198,6664.3,False
 p14_mona_lisa,42,14,Generalisation test - Mona Lisa,tournament_k10,blend,gaussian_decay,3,150,3000,3000,19.351452,4399.5,False
+p14_nadir,42,14,Generalisation test - Nadir Afonso,tournament_k10,blend,gaussian_decay,3,150,3000,3000,48.507111,4052.0,Falsep9_k5_creep_decay,43,9,Interaction check - tournament_k5 + blend + creep_decay,tournament_k5,blend,creep_decay,3,50,3000,3000,28.198256,1317.9,False
