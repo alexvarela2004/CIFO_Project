@@ -627,8 +627,7 @@ def build_experiment_plan() -> List[RunConfig]:
     # Phase 7: Init strategy sweep
     # ------------------------------------------------------------------
     for strategy in [
-        "random", "image", "mixed", "grid",
-        "semi_transparent", "small_random", "grid_random_color",
+        "random", "semi_transparent", "small_random", "grid_random_color",
         "sorted_alpha", "quadrant",
     ]:
         runs.append(RunConfig(
