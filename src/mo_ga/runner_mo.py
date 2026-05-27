@@ -90,7 +90,6 @@ CROSSOVER_RATE            = 0.8
 N_ELITES                  = 3        
 IMAGE_CHECKPOINT_INTERVAL = 100
 
-# Mutation hyperparams 
 _MUTATION_RATE    = 0.01
 _VERTEX_SIGMA_MAX = 80.0
 _VERTEX_SIGMA_MIN = 2.0
@@ -136,12 +135,10 @@ def run_seed(
 
     logger.info("--- Starting NSGA-II | seed=%d ---", seed)
 
-    # -- Build fitness functions
     rmse_fn  = RMSEFitness(target)
     ciede_fn = CIEDEFitness(target)
     fitness_fns = [rmse_fn, ciede_fn]
 
-    # -- Build operators (same best config from phases 1-11)
     mutation_op = GaussianMutation(
         mutation_rate=_MUTATION_RATE,
         vertex_sigma=_VERTEX_SIGMA_MAX,
@@ -163,7 +160,7 @@ def run_seed(
         n_elites=N_ELITES,
         n_workers=1,
         early_stopping=EarlyStopping(patience=100, tolerance=1e-4),
-        checkpoint_interval=0,   # handled manually in callback
+        checkpoint_interval=0,   
         seed=seed,
     )
 
@@ -175,7 +172,6 @@ def run_seed(
         tournament_size=2,
     )
 
-    # -- Callback for checkpoints and progress logging
     def _callback(
         generation: int,
         best: MOIndividual,
@@ -202,7 +198,6 @@ def run_seed(
                 "genotypic_variance":  round(div["genotypic_variance"], 6),
             }
 
-            # Per-objective front min
             obj_names = ["rmse", "ciede"]
             for i, name in enumerate(obj_names):
                 if i < len(front_stats.get("obj_mins", [])):
@@ -219,7 +214,7 @@ def run_seed(
                 generation, seed, stats.get("best", float("nan")), front_stats["front_size"],
             )
 
-    # -- Run
+    
     t0 = time.time()
     pareto_front = moga.run(
         target=target,
@@ -229,8 +224,7 @@ def run_seed(
     elapsed = time.time() - t0
     n_generations_run = len(moga.generation_log) - 1
 
-    # -- Save outputs
-    # Best member by each objective
+   
     if pareto_front:
         best_by_rmse  = min(pareto_front, key=lambda x: x.fitness_values[0])
         best_by_ciede = min(pareto_front, key=lambda x: x.fitness_values[1])
@@ -251,7 +245,6 @@ def run_seed(
     moga.save_log(os.path.join(seed_dir, "generation_log.json"))
     moga.save_config(os.path.join(seed_dir, "ga_config.json"))
 
-    # -- Pareto front statistics for the result row
     if pareto_front:
         mo_best_rmse  = min(ind.fitness_values[0] for ind in pareto_front)
         mo_best_ciede = min(ind.fitness_values[1] for ind in pareto_front)
@@ -265,7 +258,6 @@ def run_seed(
         mo_best_rmse, mo_best_ciede, elapsed,
     )
 
-    # -- Cross-evaluate RMSE best if provided
     rmse_run_rmse = rmse_run_ciede = ""
     if rmse_best_path is not None:
         logger.info("Loading RMSE best from %s", rmse_best_path)
@@ -350,7 +342,6 @@ def main() -> None:
         except Exception as e:
             logger.error("Seed %d failed: %s", seed, e, exc_info=True)
 
-    # Summary
     if all_results:
         print("\n--- NSGA-II Summary ---")
         print(f"{'Seed':>5} {'Front':>6} {'Best RMSE':>10} {'Best CIEDE':>12}")

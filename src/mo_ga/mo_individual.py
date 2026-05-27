@@ -97,11 +97,9 @@ class MOIndividual:
         self._fitness_fns: List[FitnessFunction] = fitness_fns
         self._cache_render: bool = cache_render
 
-        # Lazy cache — None until evaluate() is called
         self._fitness_values: Optional[List[float]] = None
         self._rendered: Optional[np.ndarray] = None
 
-        # Assigned externally by MOPopulation after ranking
         self.pareto_rank: float = float("inf")
         self.crowding_distance: float = 0.0
 
@@ -225,7 +223,6 @@ class MOIndividual:
         at_least_one_better = False
         for ai, bi in zip(a, b):
             if ai > bi:
-                # self is worse in this objective — cannot dominate
                 return False
             if ai < bi:
                 at_least_one_better = True

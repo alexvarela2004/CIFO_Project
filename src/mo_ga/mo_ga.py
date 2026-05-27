@@ -51,7 +51,7 @@ from typing import Callable, Dict, List, Optional
 
 import numpy as np
 
-from ga import GAConfig, EarlyStopping                  # reuse from original
+from ga import GAConfig, EarlyStopping                   
 from mo_ga.mo_individual import MOIndividual
 from mo_ga.mo_population import MOPopulation
 from mo_ga.mo_selection import MOTournamentSelection
@@ -105,7 +105,6 @@ class MOGA:
         self._selection = MOTournamentSelection(tournament_size=tournament_size)
         self._rng = np.random.default_rng(config.seed)
 
-        # State populated during run()
         self.generation_log: List[Dict] = []
         self.best_individual: Optional[MOIndividual] = None
         self.current_population: Optional[MOPopulation] = None
@@ -147,7 +146,7 @@ class MOGA:
         cfg = self._config
         self.generation_log = []
 
-        # -- Initialise population
+
         population = MOPopulation.random(
             size=cfg.population_size,
             fitness_fns=self._fitness_fns,
@@ -156,7 +155,7 @@ class MOGA:
             target=target,
         )
 
-        # -- Evaluate and rank initial population
+
         population.evaluate(n_workers=cfg.n_workers)
         population.assign_pareto_ranks()
         self.current_population = population
@@ -179,12 +178,12 @@ class MOGA:
             tolerance=cfg.early_stopping.tolerance,
         )
 
-        # -- Generational loop
+
         for gen in range(1, cfg.n_generations + 1):
             population = self._step(population)
             self.current_population = population
 
-            # Update best individual (by NSGA-II crowded comparison)
+
             gen_best = population.best
             if self.best_individual is None or gen_best < self.best_individual:
                 self.best_individual = gen_best
@@ -239,7 +238,6 @@ class MOGA:
         cfg = self._config
         n_offspring = cfg.population_size
 
-        # Select 2 * ceil(n_offspring / 2) parents
         n_pairs = (n_offspring + 1) // 2
         parents = self._selection.select(
             population.individuals,
@@ -247,7 +245,6 @@ class MOGA:
             rng=self._rng,
         )
 
-        # Crossover + mutation
         offspring: List[MOIndividual] = []
         for i in range(0, len(parents) - 1, 2):
             parent_a = parents[i]
@@ -264,11 +261,9 @@ class MOGA:
 
         offspring = offspring[:n_offspring]
 
-        # Evaluate offspring
         for child in offspring:
             child.evaluate()
 
-        # NSGA-II replacement: combine + re-rank + select best N
         return population.replace(offspring, n_elites=cfg.n_elites)
 
     # ------------------------------------------------------------------
@@ -294,7 +289,6 @@ class MOGA:
             **{k: round(v, 6) for k, v in stats.items()},
         }
 
-        # Per-objective Pareto front statistics
         obj_names = ["rmse", "ciede"][: len(self._fitness_fns)]
         for i, name in enumerate(obj_names):
             if i < len(front_stats.get("obj_mins", [])):

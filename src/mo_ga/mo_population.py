@@ -112,7 +112,7 @@ class MOPopulation:
                 MOIndividual.random_quadrant(fitness_fns, rng)
                 for _ in range(size)
             ]
-        else:  # random
+        else:  
             individuals = [
                 MOIndividual.random(fitness_fns, rng)
                 for _ in range(size)
@@ -221,9 +221,6 @@ class MOPopulation:
 
         n = len(self._individuals)
 
-        # --- Step 1: compute domination counts and dominated sets ---
-        # S[i] = set of individuals that individual i dominates
-        # n_dominated[i] = number of individuals that dominate individual i
         S: List[List[int]] = [[] for _ in range(n)]
         n_dominated: List[int] = [0] * n
 
@@ -236,18 +233,15 @@ class MOPopulation:
                 elif self._individuals[j].dominates(self._individuals[i]):
                     n_dominated[i] += 1
 
-        # --- Step 2: identify fronts iteratively ---
         fronts: List[List[int]] = []
         current_front = [i for i in range(n) if n_dominated[i] == 0]
         fronts.append(current_front)
 
         rank = 1
         while current_front:
-            # Assign rank to current front
             for i in current_front:
                 self._individuals[i].pareto_rank = rank
 
-            # Build next front
             next_front = []
             for i in current_front:
                 for j in S[i]:
@@ -260,7 +254,6 @@ class MOPopulation:
             if current_front:
                 fronts.append(current_front)
 
-        # --- Step 3: assign crowding distance within each front ---
         for front_indices in fronts:
             self._assign_crowding_distance(front_indices)
 
@@ -283,11 +276,11 @@ class MOPopulation:
         if n == 0:
             return
 
-        # Reset crowding distance for this front
+        
         for i in front_indices:
             self._individuals[i].crowding_distance = 0.0
 
-        # Boundary individuals always get infinite distance
+        
         if n <= 2:
             for i in front_indices:
                 self._individuals[i].crowding_distance = float("inf")
@@ -296,22 +289,21 @@ class MOPopulation:
         n_obj = self._individuals[0].n_objectives
 
         for obj_idx in range(n_obj):
-            # Sort front by this objective
             sorted_indices = sorted(
                 front_indices,
                 key=lambda i: self._individuals[i].fitness_values[obj_idx],
             )
 
-            # Boundary individuals get infinite distance
+            
             self._individuals[sorted_indices[0]].crowding_distance = float("inf")
             self._individuals[sorted_indices[-1]].crowding_distance = float("inf")
 
-            # Normalise by objective range
+            
             f_min = self._individuals[sorted_indices[0]].fitness_values[obj_idx]
             f_max = self._individuals[sorted_indices[-1]].fitness_values[obj_idx]
             f_range = f_max - f_min if f_max != f_min else 1.0
 
-            # Interior individuals
+        
             for k in range(1, n - 1):
                 prev_val = self._individuals[sorted_indices[k - 1]].fitness_values[obj_idx]
                 next_val = self._individuals[sorted_indices[k + 1]].fitness_values[obj_idx]
@@ -352,17 +344,16 @@ class MOPopulation:
         MOPopulation
             New population of size self._size, selected by NSGA-II criterion.
         """
-        # Combine parent and offspring populations
+        
         combined = self._individuals + list(offspring)
         combined_pop = MOPopulation(combined)
 
-        # Evaluate any unevaluated offspring
+        
         combined_pop.evaluate()
 
-        # Assign Pareto ranks to the combined pool
+    
         combined_pop.assign_pareto_ranks()
 
-        # Select best N by NSGA-II crowded comparison
         selected = combined_pop.sorted_individuals[: self._size]
         return MOPopulation(selected)
 
@@ -435,7 +426,7 @@ class MOPopulation:
 
         return {
             "phenotypic_entropy":  float(-np.sum(arr / arr.sum() * np.log(arr / arr.sum() + 1e-10))),
-            "genotypic_entropy":   0.0,   # expensive to compute — omitted in MO mode
+            "genotypic_entropy":   0.0, 
             "phenotypic_variance": pheno_var,
             "genotypic_variance":  0.0,
         }

@@ -95,7 +95,6 @@ class MOTournamentSelection:
         for _ in range(n_parents):
             indices = rng.integers(0, pop_size, size=self.tournament_size)
             participants = [population[i] for i in indices]
-            # min() uses MOIndividual.__lt__ which is the crowded comparison
             winner = min(participants)
             selected.append(winner)
 
