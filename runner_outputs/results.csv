@@ -62,6 +62,7 @@ p5_mut_composite_creep,44,5,Mutation sweep - composite_creep,tournament_k10,two_
 p5_mut_composite_gaussian_decay,42,5,Mutation sweep - composite_gaussian_decay,tournament_k10,two_point,composite_gaussian_decay,5,50,3000,3000,25.835899,1108.4,False
 p5_mut_composite_gaussian_decay,43,5,Mutation sweep - composite_gaussian_decay,tournament_k10,two_point,composite_gaussian_decay,5,50,3000,3000,25.630869,1194.6,False
 p5_mut_composite_gaussian_decay,44,5,Mutation sweep - composite_gaussian_decay,tournament_k10,two_point,composite_gaussian_decay,5,50,3000,3000,25.912867,1212.6,False
+p6_gaussian_decay_5k,42,6,Best config with 20000 generations,tournament_k10,two_point,gaussian_decay,5,50,20000,20000,21.832701,20072.2,False
 p6_gaussian_decay_5k,43,6,Best config with 20000 generations,tournament_k10,two_point,gaussian_decay,5,50,20000,20000,21.62039,17831.2,False
 p6_gaussian_decay_5k,44,6,Best config with 20000 generations,tournament_k10,two_point,gaussian_decay,5,50,20000,20000,22.873709,17886.2,False
 p7_init_random,42,7,Init strategy sweep - random,tournament_k10,two_point,gaussian_decay,5,50,500,500,29.59379,433.9,False
